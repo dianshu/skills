@@ -9,9 +9,6 @@
     "./skills/engineering/tdd",
     "./skills/engineering/to-issues",
     "./skills/engineering/to-prd",
-    "./skills/engineering/zoom-out",
-    "./skills/productivity/caveman",
-    "./skills/productivity/grill-me",
-    "./skills/productivity/write-a-skill"
+    "./skills/engineering/zoom-out"
   ]
 }
