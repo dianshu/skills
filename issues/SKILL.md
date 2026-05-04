@@ -19,8 +19,6 @@ Work from whatever is already in the conversation context. If the user passes an
 
 If you have not already explored the codebase, do so to understand the current state of the code. Issue titles and descriptions should use the project's domain glossary vocabulary, and respect ADRs in the area you're touching.
 
-If `$PWD/GRILLCOMMITMENTS.md` exists, read it. Treat each active commitment (under `## Commitments`, not superseded in `## Modifications`) as a constraint on the breakdown — slice boundaries, priority, and acceptance criteria must honor those commitments. Surface any conflict to the user rather than silently overriding it.
-
 ### 3. Draft vertical slices
 
 Break the plan into **tracer bullet** issues. Each issue is a thin vertical slice that cuts through ALL integration layers end-to-end, NOT a horizontal slice of one layer.
