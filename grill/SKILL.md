@@ -88,7 +88,7 @@ Maintain `$PWD/GRILLCOMMITMENTS.md` to detect when later answers silently overtu
 - **At start**:
   - If file does not exist → create with header (`# Grill Session Commitments`, `Started: <ISO>`, `Topic: <one line>`, empty `## Commitments`, `## Modifications`, `## Backtrack Check Log` sections)
   - If file exists → ask user (Chinese, terse): `发现已有 GRILLCOMMITMENTS.md（<date>，N 条承诺）。覆盖？(y/n)`. `n` → abort the skill.
-- **At end** (user signals grilling is done): ask `Grilling 结束。删除 GRILLCOMMITMENTS.md？(y/n)`. **Never auto-delete.** A leftover file only triggers the start-time overwrite prompt next time; it does not corrupt new sessions.
+- **At end** (user signals grilling is done): leave `GRILLCOMMITMENTS.md` in place. Do not prompt to delete it and never auto-delete. Downstream skills (prd, issues) consume it, and a leftover file only triggers the start-time overwrite prompt next session.
 
 #### What counts as a commitment
 
