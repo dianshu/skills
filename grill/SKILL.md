@@ -79,6 +79,54 @@ When a term is resolved, update `CONTEXT.md` right there. Don't batch these up �
 
 Don't couple `CONTEXT.md` to implementation details. Only include terms that are meaningful to domain experts.
 
+### Track session commitments
+
+Maintain `$PWD/GRILLCOMMITMENTS.md` to detect when later answers silently overturn earlier ones.
+
+#### File lifecycle
+
+- **At start**:
+  - If file does not exist → create with header (`# Grill Session Commitments`, `Started: <ISO>`, `Topic: <one line>`, empty `## Commitments`, `## Modifications`, `## Backtrack Check Log` sections)
+  - If file exists → ask user (Chinese, terse): `发现已有 GRILLCOMMITMENTS.md（<date>，N 条承诺）。覆盖？(y/n)`. `n` → abort the skill.
+- **At end** (user signals grilling is done): ask `Grilling 结束。删除 GRILLCOMMITMENTS.md？(y/n)`. **Never auto-delete.** A leftover file only triggers the start-time overwrite prompt next time; it does not corrupt new sessions.
+
+#### What counts as a commitment
+
+Record only:
+- **Decisions** — chose A over B
+- **Constraints** — "must support offline"
+- **Scope** — feature must be in / out
+- **Priorities** — A matters more than B
+- **Key term definitions** — "Customer = paying entity, not User"
+
+Do **not** record:
+- Intermediate ideas or rejected proposals
+- Single-point clarifications ("button on the left") unless they elevate to a principle
+- Items marked TBD / pending
+- Q&A answers that don't establish a cross-question stance
+
+Append as `- [Cn] <statement> | added at Q<index>` to `## Commitments`.
+
+#### When to run backtrack check
+
+Run when **any** holds:
+- ≥3 active commitments AND ≥5 questions since last check
+- User makes a commitment-level statement (scope / priority / definition / quantity)
+- Topic switch
+
+#### Check procedure
+
+1. **Read** `GRILLCOMMITMENTS.md` (do not rely on memory).
+2. For each active commitment C, evaluate three dimensions against the new discussion:
+   - **Alignment**: SUPPORTED / TENSION / **CONTRADICTED**
+   - **Scope** (if C is about features/capabilities): PRESENT / WEAKENED / **ABSENT**
+   - **Priority** (if C established ordering): MAINTAINED / SHIFTED / **REVERSED**
+3. Classify and act:
+   - **Hard** (Alignment = CONTRADICTED) → interrupt immediately: "和 C{n} 直接冲突——选一个。"
+   - **Soft** (Scope = ABSENT or Priority = REVERSED) → confirm intent: "C{n} 之前说 X，现在像变了——确认是有意改吗？" If user confirms change, append `- [C{n} → modified at Q{m}] <reason>` to `## Modifications`.
+   - **Warning** (TENSION / WEAKENED / SHIFTED) → log only, don't interrupt.
+4. Append a `### After Q{m} (N commitments active)` block to `## Backtrack Check Log` listing each C's status.
+
 ### Offer ADRs sparingly
 
 Only offer to create an ADR when all three are true:
