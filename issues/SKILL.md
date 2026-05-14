@@ -51,7 +51,7 @@ Iterate until the user approves the breakdown.
 
 ### 5. Publish the issues to the issue tracker
 
-For each approved slice, publish a new issue to the issue tracker. Use the issue body template below. Apply the `needs-triage` triage label so each issue enters the normal triage flow.
+For each approved slice, publish a new issue to the issue tracker. Use the issue body template below. Apply the appropriate triage label: AFK slices get `ready-for-agent` (they have a complete plan and acceptance criteria — no further triage needed); HITL slices get `ready-for-human`. Use `needs-triage` only if a slice is genuinely under-specified after this skill ran.
 
 Publish issues in dependency order (blockers first) so you can reference real issue identifiers in the "Blocked by" field.
 

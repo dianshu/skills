@@ -77,7 +77,7 @@ When the user states how something works, check whether the code agrees. If you 
 
 When a term is resolved, update `CONTEXT.md` right there. Don't batch these up — capture them as they happen. Use the format in [CONTEXT-FORMAT.md](./CONTEXT-FORMAT.md).
 
-Don't couple `CONTEXT.md` to implementation details. Only include terms that are meaningful to domain experts.
+Don't couple `CONTEXT.md` to implementation details. `CONTEXT.md` is a **glossary** — nothing else. It is not a spec, not a scratch pad, not a place to record implementation decisions. Only include terms that are meaningful to domain experts. Implementation decisions belong in ADRs, not `CONTEXT.md`.
 
 ### Track session commitments
 
