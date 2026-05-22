@@ -69,7 +69,6 @@ Each iteration:
 5. Pick `EXPECTED` = the issue in `RUNNABLE` with the smallest `NN`. Parse its title (Title parsing). Store `EXPECTED_NN`, `EXPECTED_TITLE`.
 6. Dispatch one subagent with the Agent tool:
    - `subagent_type: general-purpose`
-   - `mode: bypassPermissions`
    - `description: run next issue`
    - `prompt`: exactly the block below.
 
@@ -124,10 +123,6 @@ Print exactly one of these as the final line(s):
 - `❌ Post-commit dirty after issue <NN>: <porcelain>`.
 - `❌ Exceeded iteration cap (MAX=<MAX>); ran <N> rounds`.
 - `❌ Preflight: <specific reason>`.
-
-## Compatibility note
-
-This skill assumes the Agent tool accepts `mode: bypassPermissions`. If a future harness removes that parameter, fail-fast before dispatch with: `❌ Agent tool no longer accepts mode=bypassPermissions; rerun this skill from a parent session started with --dangerously-skip-permissions`.
 
 ## Out of scope
 
