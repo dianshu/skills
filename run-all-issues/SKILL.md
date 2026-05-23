@@ -91,8 +91,25 @@ Each iteration:
    - `BEFORE - AFTER` must be empty. If not → fail-fast: `❌ Done file removed: <list>`.
    - Re-run the filename-shape + no-duplicate-NN invariant from preflight step 2. Any violation → fail-fast: `❌ Invariant broken: <details>`.
 9. Compute `DELTA = AFTER - BEFORE`.
-   - If `|DELTA| == 0` → fail-fast: `❌ Failed at issue <EXPECTED_NN> "<EXPECTED_TITLE>" (no done file produced; /tdd or /finalize failed; working tree may be dirty — run \`git status\` to inspect)`.
-   - If `|DELTA| >= 2` or the single delta's `NN` ≠ `EXPECTED_NN` → fail-fast: `❌ Unexpected done-set change: expected <EXPECTED_NN>, got <actual list>`.
+   - If `|DELTA| == 0`:
+     - If this iteration's dispatch was the **first attempt** for `EXPECTED_NN`: log one line `↻ retry issue <EXPECTED_NN> "<EXPECTED_TITLE>" (no done file produced on first attempt)`, then **re-dispatch the same subagent prompt once** (go back to step 6 for this same issue). Do NOT increment `ROUNDS` for the retry — the retry counts as part of the same iteration.
+     - If this iteration's dispatch was the **retry attempt** and DELTA is still 0 → fail-fast with the full diagnostic block below. Run these three commands and embed their output verbatim:
+       ```bash
+       git status --porcelain
+       git diff --stat
+       git diff --stat --cached
+       ```
+       Format:
+       ```
+       ❌ Failed at issue <EXPECTED_NN> "<EXPECTED_TITLE>" after retry (no done file produced).
+       --- git status --porcelain ---
+       <output>
+       --- git diff --stat ---
+       <output>
+       --- git diff --stat --cached ---
+       <output>
+       ```
+   - If `|DELTA| >= 2` or the single delta's `NN` ≠ `EXPECTED_NN` → fail-fast: `❌ Unexpected done-set change: expected <EXPECTED_NN>, got <actual list>` (no retry — this is a state corruption signal, not a flake).
 10. Commit:
     - `NN` = `EXPECTED_NN`; `TITLE` = title parsed from the new `done-NN-*.md` file (Title parsing). If parsing somehow fails on the renamed file, fall back to `EXPECTED_TITLE` captured before dispatch.
     - Run exactly:
@@ -115,7 +132,7 @@ Print exactly one of these as the final line(s):
 
 - `✅ Done: <N> issues completed` + list of `done-NN: <title>` lines.
 - `⚠️ Stuck: <NN-list> blocked by unfinished issues`.
-- `❌ Failed at issue <NN> "<title>" (...)`.
+- `❌ Failed at issue <NN> "<title>" after retry (no done file produced).` followed by `git status --porcelain` / `git diff --stat` / `git diff --stat --cached` blocks.
 - `❌ Unexpected done-set change: expected <NN>, got <list>`.
 - `❌ Done file removed: <list>`.
 - `❌ Invariant broken: <details>`.
