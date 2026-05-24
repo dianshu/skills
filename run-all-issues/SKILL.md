@@ -18,12 +18,7 @@ Drain every pending issue in `.matt/issues/` in dependency order, each in its ow
 
 Run these in order:
 
-1. **YOLO mode check.** This loop dispatches many subagents that must run without confirmation prompts; it is only safe in `bypassPermissions` (yolo) mode. Inspect the current session's permission mode (status line / `/status`, or the harness-provided indicator). If it is NOT `bypassPermissions`:
-   - Use `AskUserQuestion` to ask whether to switch to yolo mode before continuing. Options:
-     - `1. 切换到 yolo` — user must run `/permissions bypassPermissions` (or restart with `--dangerously-skip-permissions`) themselves; this skill cannot change the mode. After they confirm switched, re-check and continue.
-     - `2. 继续（不切换）` — proceed anyway, accepting that subagents may stall on permission prompts.
-     - `3. 中止` — fail-fast: `❌ Preflight: not in yolo mode, user aborted`.
-   - If already in `bypassPermissions`, skip silently.
+1. **YOLO mode check.** Subagents must run unattended; only safe in `bypassPermissions` mode. Claude Code does not expose `permission_mode` to skills (hooks-only) — must ask. `/permissions` cannot switch INTO yolo mid-session; only `--dangerously-skip-permissions` at launch works. `AskUserQuestion` with: `1. 已在 yolo` (continue) / `2. 继续（不在 yolo）` (continue, may stall) / `3. 中止` (fail: `❌ Preflight: not in yolo mode, user aborted` — suggest relaunch with `claude --dangerously-skip-permissions`).
 2. `git rev-parse --is-inside-work-tree` returns `true`.
 3. `.matt/CLAUDE.md` exists and first line matches `^# Feature: (.+)$` — capture `SLUG`. `.matt/issues/` has at least one `.md` file. Every filename in `.matt/issues/` matches `^(done-)?[0-9]{2,}-[a-z0-9-]+\.md$`. After stripping the optional `done-` prefix, the `NN-<slug>` portion must be unique — both `03-foo.md` and `done-03-foo.md` present is a conflict.
 4. `git check-ignore -q .matt` exits 0. (Run BEFORE the dirty check so that untracked content inside `.matt/` does not surface as a false dirty signal.)
