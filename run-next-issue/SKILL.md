@@ -56,8 +56,17 @@ Print:
 Then immediately invoke `/tdd` with the selected issue file path as input. Tell the TDD flow:
 
 > Implement the issue at `<path>`. The issue file is the full contract — acceptance criteria are inside.
-> When you judge the issue fully complete:
-> 1. Invoke `/finalize`.
-> 2. Only after `/finalize` passes review and verification, rename the file from `NN-<slug>.md` to `done-NN-<slug>.md` (sync rules in `.matt/CLAUDE.md` will handle the backup).
->
-> Do NOT push. `/finalize` handles review and verification only.
+> When you judge the issue fully complete, invoke `/finalize` to run review and verification.
+> Do NOT push. Do NOT rename or move the issue file — this skill (`/run-next-issue`) handles that in its own step 5 after `/finalize` returns.
+
+### 5. Mark done
+
+After `/finalize` returns with a passing summary, **you (the `/run-next-issue` orchestrator) must explicitly rename the issue file**:
+
+```bash
+git mv .matt/issues/<NN>-<slug>.md .matt/issues/done-<NN>-<slug>.md
+```
+
+This step is mandatory and is the single source of truth for issue completion. Do NOT skip it, do NOT delegate it to `/tdd` or `/finalize` (they will not do it — `/finalize`'s summary is a terminal output and forbids trailing actions). Do NOT commit; the caller (`/run-all-issues` or the user) owns commits.
+
+If `/finalize` does not pass (failures it logs as won't-fix don't count as a pass) → do NOT rename; report the failure and stop.
