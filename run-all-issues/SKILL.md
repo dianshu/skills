@@ -18,12 +18,18 @@ Drain every pending issue in `.matt/issues/` in dependency order, each in its ow
 
 Run these in order:
 
-1. `git rev-parse --is-inside-work-tree` returns `true`.
-2. `.matt/CLAUDE.md` exists and first line matches `^# Feature: (.+)$` — capture `SLUG`. `.matt/issues/` has at least one `.md` file. Every filename in `.matt/issues/` matches `^(done-)?[0-9]{2,}-[a-z0-9-]+\.md$`. After stripping the optional `done-` prefix, the `NN-<slug>` portion must be unique — both `03-foo.md` and `done-03-foo.md` present is a conflict.
-3. `git check-ignore -q .matt` exits 0. (Run BEFORE the dirty check so that untracked content inside `.matt/` does not surface as a false dirty signal.)
-4. `git status --porcelain` is empty.
-5. `git fetch origin main:refs/remotes/origin/main` exits 0. (Explicit refspec forces update of the remote-tracking ref — plain `git fetch origin main` does not.)
-6. Current branch (`git rev-parse --abbrev-ref HEAD`) is `main` or `feiyue/<SLUG>`.
+1. **YOLO mode check.** This loop dispatches many subagents that must run without confirmation prompts; it is only safe in `bypassPermissions` (yolo) mode. Inspect the current session's permission mode (status line / `/status`, or the harness-provided indicator). If it is NOT `bypassPermissions`:
+   - Use `AskUserQuestion` to ask whether to switch to yolo mode before continuing. Options:
+     - `1. 切换到 yolo` — user must run `/permissions bypassPermissions` (or restart with `--dangerously-skip-permissions`) themselves; this skill cannot change the mode. After they confirm switched, re-check and continue.
+     - `2. 继续（不切换）` — proceed anyway, accepting that subagents may stall on permission prompts.
+     - `3. 中止` — fail-fast: `❌ Preflight: not in yolo mode, user aborted`.
+   - If already in `bypassPermissions`, skip silently.
+2. `git rev-parse --is-inside-work-tree` returns `true`.
+3. `.matt/CLAUDE.md` exists and first line matches `^# Feature: (.+)$` — capture `SLUG`. `.matt/issues/` has at least one `.md` file. Every filename in `.matt/issues/` matches `^(done-)?[0-9]{2,}-[a-z0-9-]+\.md$`. After stripping the optional `done-` prefix, the `NN-<slug>` portion must be unique — both `03-foo.md` and `done-03-foo.md` present is a conflict.
+4. `git check-ignore -q .matt` exits 0. (Run BEFORE the dirty check so that untracked content inside `.matt/` does not surface as a false dirty signal.)
+5. `git status --porcelain` is empty.
+6. `git fetch origin main:refs/remotes/origin/main` exits 0. (Explicit refspec forces update of the remote-tracking ref — plain `git fetch origin main` does not.)
+7. Current branch (`git rev-parse --abbrev-ref HEAD`) is `main` or `feiyue/<SLUG>`.
 
 ## Branch setup
 
@@ -31,7 +37,7 @@ Run these in order:
 - On `main`:
   - If local branch `feiyue/<SLUG>` already exists (`git rev-parse --verify --quiet refs/heads/feiyue/<SLUG>`) → fail-fast: `❌ Preflight: feiyue/<SLUG> already exists; checkout it manually and re-run`.
   - Otherwise: `git checkout -b feiyue/<SLUG> origin/main`.
-- Other branch → already rejected in preflight step 6.
+- Other branch → already rejected in preflight step 7.
 
 After branch setup, re-run `git check-ignore -q .matt`. If it fails (the new branch's ref base may not contain the `.matt/` ignore), fail-fast: `❌ Preflight: .matt/ not ignored on feiyue/<SLUG>`.
 
@@ -89,7 +95,7 @@ Each iteration:
 7. After the subagent returns, snapshot `AFTER` = sorted list of `done-*.md` filenames.
 8. Integrity checks (before commit):
    - `BEFORE - AFTER` must be empty. If not → fail-fast: `❌ Done file removed: <list>`.
-   - Re-run the filename-shape + no-duplicate-NN invariant from preflight step 2. Any violation → fail-fast: `❌ Invariant broken: <details>`.
+   - Re-run the filename-shape + no-duplicate-NN invariant from preflight step 3. Any violation → fail-fast: `❌ Invariant broken: <details>`.
 9. Compute `DELTA = AFTER - BEFORE`.
    - If `|DELTA| == 0`:
      - If this iteration's dispatch was the **first attempt** for `EXPECTED_NN`: log one line `↻ retry issue <EXPECTED_NN> "<EXPECTED_TITLE>" (no done file produced on first attempt)`, then **re-dispatch the same subagent prompt once** (go back to step 6 for this same issue). Do NOT increment `ROUNDS` for the retry — the retry counts as part of the same iteration.
