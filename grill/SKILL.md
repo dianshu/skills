@@ -9,6 +9,8 @@ Interview me relentlessly about every aspect of this plan until we reach a share
 
 Ask the questions one at a time, waiting for feedback on each question before continuing.
 
+When a question offers the user multiple directions to choose from, follow `~/.claude/injected-rules/question-format.md`: prefer `AskUserQuestion`, otherwise label each option with a short number/tag and place your recommended answer as **#1** with a positively-phrased label.
+
 If a question can be answered by exploring the codebase, explore the codebase instead.
 
 </what-to-do>
