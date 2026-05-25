@@ -64,7 +64,7 @@ Each iteration:
 1. `ROUNDS++`. If `ROUNDS > MAX` → fail-fast: `❌ Exceeded iteration cap (MAX=<MAX>); ran <ROUNDS-1> rounds`.
 2. Snapshot `BEFORE` = sorted list of `done-*.md` filenames in `.matt/issues/`.
 3. Build `PENDING` = sorted list of pending issue files (no `done-` prefix).
-   - If `PENDING` is empty → normal exit: `✅ Done: <N> issues completed` followed by the numbered list of done- files.
+   - If `PENDING` is empty → exit main loop and proceed to **Post-drain verification** below. Do NOT print the `✅ Done` line yet — it is printed only after verification converges.
 4. Compute `RUNNABLE` = pending issues whose blockers are all done (via Blocker parsing).
    - If `RUNNABLE` is empty → fail-fast: `⚠️ Stuck: <comma-separated NN list> blocked by unfinished issues`.
 5. Pick `EXPECTED` = the issue in `RUNNABLE` with the smallest `NN`. Parse its title (Title parsing). Store `EXPECTED_NN`, `EXPECTED_TITLE`.
@@ -123,6 +123,36 @@ Each iteration:
 11. Post-commit isolation check: `git status --porcelain` must be empty. If not → fail-fast: `❌ Post-commit dirty after issue <NN>: <porcelain output>`.
 12. Log one line and continue: `· <NN> "<TITLE>" finalize=<pass> commit=<short-sha>` (using `git rev-parse --short HEAD`).
 
+## Post-drain verification loop
+
+After all issues are drained (PENDING empty), run a fix-verify loop. Cap iterations at `VERIFY_MAX = 5` (`VERIFY_ROUNDS = 0`).
+
+Each iteration:
+
+1. `VERIFY_ROUNDS++`. If `VERIFY_ROUNDS > VERIFY_MAX` → fail-fast: `❌ Verification did not converge after <VERIFY_MAX> rounds`.
+2. **Run full UT suite.** Detect the project's test command from `.matt/CLAUDE.md`, `package.json`, `Makefile`, `pyproject.toml`, etc. If you cannot determine it deterministically, ask the user once via `AskUserQuestion` and remember the answer for subsequent rounds.
+3. **Run `/e2e-verify`** via the Skill tool in the main agent.
+4. Collect failures from both steps. If both clean → break out of the loop with success.
+5. **Fix.** For each distinct failure:
+   - Prefer dispatching a `general-purpose` subagent per independent failure (parallel where they touch disjoint files) with a prompt that:
+     - States the failing test / scenario and the observed output.
+     - Instructs the subagent to invoke `/tdd` to drive the fix.
+     - Forbids creating any new issue file under `.matt/issues/`.
+     - Forbids `git push` / `/push` / PR creation.
+     - Forbids asking the user questions; proceed with best judgment.
+     - Requires output of exactly one line: `RESULT fix="<short description>" status=<pass|fail>`.
+   - If failures are tightly coupled or trivially small, fix directly in the main agent using `/tdd` instead.
+6. After fixes, `git status --porcelain` may be non-empty. Commit with:
+   ```bash
+   git add -A && printf 'verify round %s: fix %s\n' "$VERIFY_ROUNDS" "<short summary>" | git commit -F -
+   ```
+   Skip the commit if the working tree is clean (a subagent already committed).
+7. Loop back to step 2.
+
+On successful convergence (step 4 clean), print the original termination line: `✅ Done: <N> issues completed` + the `done-NN: <title>` list, followed by `✅ Verification: UT + e2e-verify clean after <VERIFY_ROUNDS> round(s)`.
+
+Hard constraint for this loop: **never create new issue files**. The drain phase is over; fixes are surgical.
+
 ## Selection contract (drift policy)
 
 The main loop computes `EXPECTED` with this skill's deterministic blocker parser. `/run-next-issue` has its own (looser) parsing and is out of scope to change here. If the two disagree and the resulting `DELTA` does not match `EXPECTED`, the loop fails fast at step 9 — drift is treated as a real signal, not a false positive. Do not try to reconcile by editing `/run-next-issue` or by skipping the subagent and renaming files directly.
@@ -140,6 +170,7 @@ Print exactly one of these as the final line(s):
 - `❌ Commit failed at issue <NN>: <reason>`.
 - `❌ Post-commit dirty after issue <NN>: <porcelain>`.
 - `❌ Exceeded iteration cap (MAX=<MAX>); ran <N> rounds`.
+- `❌ Verification did not converge after <VERIFY_MAX> rounds`.
 - `❌ Preflight: <specific reason>`.
 
 ## Out of scope
