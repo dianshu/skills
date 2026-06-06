@@ -95,6 +95,11 @@ Each iteration:
    - The expected next issue number is <EXPECTED_NN> ("<EXPECTED_TITLE>"). If /run-next-issue selects a different one, still let it complete — the main loop will reconcile.
    - When fully done, output exactly ONE line in this format and nothing else:
      RESULT issue=<NN> title="<TITLE>" finalize=<pass|fail>
+
+   CRITICAL closing protocol — /finalize's review summary at the end of /run-next-issue tends to crowd out this RESULT line:
+   - Do NOT emit a code review, findings list, JSON-formatted analysis, "## Finalize Summary" block, "Won't-fix items" list, "Review rounds completed" header, or any text other than the RESULT line in your final message. The outer loop only reads the LAST message.
+   - Do NOT forget the .matt/issues/<NN>-<slug>.md → done-<NN>-<slug>.md rename. The rename is the SOLE signal the outer loop uses to detect completion.
+   - If /finalize printed a summary right before you stop, your job is NOT done — you must still rename the file and emit the RESULT line as a separate final message.
    ```
 
 7. After the subagent returns, snapshot `AFTER` = sorted list of `done-*.md` filenames.
@@ -103,8 +108,11 @@ Each iteration:
    - Re-run the filename-shape + no-duplicate-NN invariant from preflight step 3. Any violation → fail-fast: `❌ Invariant broken: <details>`.
 9. Compute `DELTA = AFTER - BEFORE`.
    - If `|DELTA| == 0`:
-     - If this iteration's dispatch was the **first attempt** for `EXPECTED_NN`: log one line `↻ retry issue <EXPECTED_NN> "<EXPECTED_TITLE>" (no done file produced on first attempt)`, then **re-dispatch the same subagent prompt once** (go back to step 6 for this same issue). Do NOT increment `ROUNDS` for the retry — the retry counts as part of the same iteration.
-     - If this iteration's dispatch was the **retry attempt** and DELTA is still 0 → fail-fast with the full diagnostic block below. Run these three commands and embed their output verbatim:
+     - This iteration's dispatch was the **first attempt** for `EXPECTED_NN`: classify by whether the subagent did substantive work, then retry accordingly. Run `git status --porcelain` once and inspect.
+       - **Close-out drift** (work-tree is dirty AND the expected `NN-<slug>.md` is still present in `.matt/issues/`): the subagent successfully ran `/tdd` + `/finalize` and left implementation diff on disk, but its final message was `/finalize`'s reviewer summary (JSON findings array, "## Finalize Summary" block, "Won't-fix items" list) instead of the required `RESULT issue=...` line, so it also skipped the `done-` rename. Empirically very common — measured at 8 of 10 dispatches in a recent drain. Log `↻ close-out retry issue <EXPECTED_NN> "<EXPECTED_TITLE>" (work-tree has <N> changes; rename + RESULT missing)`. Dispatch a **close-out-only retry** using the prompt template in **Close-out-only retry prompt** below (NOT the full `/run-next-issue` prompt — that would re-run implementation work that's already on disk). Typical cost 10-30s, ~80k tokens, 1-6 tool uses.
+       - **Empty-result drift** (work-tree is clean OR dirty diff is unrelated to the issue): the subagent did not do the work, or did something but left no trace. Log `↻ retry issue <EXPECTED_NN> "<EXPECTED_TITLE>" (no done file produced on first attempt)` and re-dispatch the original full `/run-next-issue` subagent prompt from step 6.
+       - In both cases: do NOT increment `ROUNDS` — the retry counts as part of the same iteration. Go back to step 7 after the retry returns.
+     - This iteration's dispatch was the **retry attempt** and DELTA is still 0 → fail-fast with the full diagnostic block below. Run these three commands and embed their output verbatim:
        ```bash
        git status --porcelain
        git diff --stat
@@ -121,6 +129,37 @@ Each iteration:
        <output>
        ```
    - If `|DELTA| >= 2` or the single delta's `NN` ≠ `EXPECTED_NN` → fail-fast: `❌ Unexpected done-set change: expected <EXPECTED_NN>, got <actual list>` (no retry — this is a state corruption signal, not a flake).
+
+### Close-out-only retry prompt
+
+Used by step 9's close-out drift branch. Do NOT include the original `/run-next-issue` instructions — the implementation is already on disk; re-dispatching the full prompt would either (a) duplicate work or (b) hit the same drift on the second `/finalize` pass. The prompt is a pure file-rename + RESULT-emission task with the diagnostic context the subagent needs to know it's a recovery, not a fresh run.
+
+Substitute `<NN>`, `<SLUG>` (e.g. `litert-lm-vision-stub-cancel-wrapper`), `<FEATURE>` (the SLUG captured in preflight step 3), and `<GIT_STATUS>` (verbatim `git status --porcelain` output).
+
+```
+In the current working directory, a previous subagent ran /run-next-issue
+for issue <NN> ("<NN>-<SLUG>") and completed implementation, but its
+final message was /finalize's reviewer summary instead of the required
+RESULT line, so it also skipped the done- rename.
+
+Current work-tree (DO NOT modify these files — the outer loop will
+commit them next):
+
+<GIT_STATUS>
+
+Your ONLY job:
+(a) Rename .matt/issues/<NN>-<SLUG>.md → .matt/issues/done-<NN>-<SLUG>.md
+(b) Mirror to backup per .matt/CLAUDE.md sync rule:
+    rm ~/.claude/matt/features/<FEATURE>/issues/<NN>-<SLUG>.md
+    && cp .matt/issues/done-<NN>-<SLUG>.md ~/.claude/matt/features/<FEATURE>/issues/done-<NN>-<SLUG>.md
+(c) Final message MUST be exactly one line and nothing else:
+    RESULT issue=<NN> title="<NN>-<SLUG>" finalize=pass
+
+Do NOT git commit. Do NOT re-run /tdd, /finalize, or any tests. Do NOT
+emit code review, findings, or summary text. Do NOT modify any source
+files. Anything other than the RESULT line in your final message will
+cause the outer loop to re-dispatch.
+```
 10. Commit:
     - `NN` = `EXPECTED_NN`; `TITLE` = title parsed from the new `done-NN-*.md` file (Title parsing). If parsing somehow fails on the renamed file, fall back to `EXPECTED_TITLE` captured before dispatch.
     - Run exactly:
