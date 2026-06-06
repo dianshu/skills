@@ -25,6 +25,7 @@ Run these in order:
 5. `git status --porcelain` is empty.
 6. `git fetch origin main:refs/remotes/origin/main` exits 0. (Explicit refspec forces update of the remote-tracking ref — plain `git fetch origin main` does not.)
 7. Current branch (`git rev-parse --abbrev-ref HEAD`) is `main` or `feiyue/<SLUG>`.
+8. **Dry-parse every pending issue's `## Blocked by`.** For each `.matt/issues/<file>.md` whose name does NOT start with `done-`, run the full **Blocker parsing (deterministic)** algorithm below (parse + existence check). On the first failure, fail-fast with `❌ Preflight: <filename>: <Blocker parsing message, leading ❌ stripped>` — e.g. `❌ Preflight: 10-cleanup.md: Issue 10 has unparseable Blocked by line: - **Phase 4 production rollout signal** ...`. This catches malformed sections and bad references before branch setup or any subagent dispatch — never mid-drain.
 
 ## Branch setup
 
@@ -38,14 +39,23 @@ After branch setup, re-run `git check-ignore -q .matt`. If it fails (the new bra
 
 ## Blocker parsing (deterministic)
 
+Strict bullet-by-bullet form. Every non-blank line in the section must either be a `none` shortcut or a bullet whose **first token after the bullet marker** is an issue reference in one of the two accepted shapes below. Anything else fails fast — silently dropping a line means a non-code blocker (release-window signal, manual sign-off, "1 week telemetry gate") could pass unnoticed and the loop would dispatch an issue whose human gate is unmet.
+
 For an issue file:
 
 1. Locate the line matching `^##[ \t]+Blocked by[ \t]*$` (case sensitive). If absent → no blockers.
-2. Take all lines from there to the next `^##[ \t]` heading or EOF as the section body.
-3. Extract every `\b[0-9]{2,}\b` sequence from the body as blocker numbers.
-4. If the body contains no digits but matches `(?i)none` → no blockers.
-5. A blocker number `NN` is "done" iff `.matt/issues/done-NN-*.md` exists.
-6. If any blocker number references an issue that does not exist (no `NN-*.md` or `done-NN-*.md` in the directory) → fail-fast: `❌ Issue <ISSUE_NN> references nonexistent blocker <NN>`.
+2. Take all lines AFTER that heading up to (not including) the next `^##[ \t]` heading or EOF as the section **body**.
+3. If the body has no non-blank lines → no blockers.
+4. If the body's only non-blank content matches `^[ \t]*[Nn]one\b.*$` on a single line (with anything after `none`, e.g. `None - can start immediately.`) → no blockers. This shortcut is rejected if any other non-blank line is present (no mixing `None` with bullets).
+5. Otherwise, iterate the body's non-blank lines in order. Every non-blank line MUST match exactly one of:
+   - **Backtick form**: `^[ \t]*[-*+][ \t]+\x60(done-)?([0-9]{2,})-[a-z0-9-]+\.md\x60.*$` — the backtick-wrapped filename is the entire first token; the closing backtick is required, but any trailing characters after it (spaces, full-width punctuation, prose) are permitted and ignored.
+   - **Hash form**: `^[ \t]*[-*+][ \t]+#([0-9]{2,})\b.*$` — the `#NN` is the entire first token; `\b` enforces a non-word-char boundary so `#10x` is rejected. Trailing characters after the boundary are permitted and ignored.
+
+   The captured 2+ digit run is the blocker number `NN`. Bullet marker may be `-`, `*`, or `+`. Leading whitespace (spaces or tabs) is allowed.
+6. Any non-blank line that does NOT match one of the two shapes — non-code prose (`- **Phase 4 production rollout signal** ...`), bare filename without backticks (`- 09-foo.md`), single-digit `NN` (`- \x609-foo.md\x60`), embedded reference where backtick is not the first token (`- see \x6003-foo.md\x60 for context`), unicode bullet markers (`•`, `・`, `–`), HTML comments, code fences, stray prose — → fail-fast: `❌ Issue <ISSUE_NN> has unparseable Blocked by line: <verbatim line>` (preserve the offending line exactly, including leading whitespace). This forces the human to move non-code gates OUT of `## Blocked by` — into a separate `## Hold` section, into the issue body, or out of `.matt/issues/` entirely.
+7. The **blocker number list** is the de-duplicated set of `NN` values extracted in step 5, ordered by first occurrence.
+8. A blocker number `NN` is "done" iff `.matt/issues/done-NN-*.md` exists.
+9. If any blocker number references an issue that does not exist (no `NN-*.md` or `done-NN-*.md` in the directory) → fail-fast: `❌ Issue <ISSUE_NN> references nonexistent blocker <NN>`.
 
 ## Title parsing
 
@@ -155,7 +165,7 @@ Hard constraint for this loop: **never create new issue files**. The drain phase
 
 ## Selection contract (drift policy)
 
-The main loop computes `EXPECTED` with this skill's deterministic blocker parser. `/run-next-issue` has its own (looser) parsing and is out of scope to change here. If the two disagree and the resulting `DELTA` does not match `EXPECTED`, the loop fails fast at step 9 — drift is treated as a real signal, not a false positive. Do not try to reconcile by editing `/run-next-issue` or by skipping the subagent and renaming files directly.
+The main loop computes `EXPECTED` with this skill's deterministic blocker parser. `/run-next-issue` references the same `## Blocker parsing (deterministic)` rules, so both sides should agree on every well-formed file (preflight step 8 guarantees every pending file IS well-formed). If they still disagree and the resulting `DELTA` does not match `EXPECTED`, the loop fails fast at step 9 — drift is treated as a real signal, not a false positive. Do not try to reconcile by editing `/run-next-issue` or by skipping the subagent and renaming files directly.
 
 ## Termination report formats
 

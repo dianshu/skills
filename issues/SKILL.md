@@ -53,7 +53,7 @@ Iterate until the user approves the breakdown.
 
 For each approved slice, publish a new issue to the issue tracker. Use the issue body template below. Apply the appropriate triage label: AFK slices get `ready-for-agent` (they have a complete plan and acceptance criteria — no further triage needed); HITL slices get `ready-for-human`. Use `needs-triage` only if a slice is genuinely under-specified after this skill ran.
 
-Publish issues in dependency order (blockers first) so you can reference real issue identifiers in the "Blocked by" field.
+Publish issues in dependency order (blockers first) so you can reference real issue identifiers in the "Blocked by" field. References MUST use the backtick-wrapped filename form (`` `NN-slug.md` ``) — see the template below. The `/run-all-issues` skill enforces this format with a strict bullet parser; any other shape (PR-style `#NN`, plain prose, embedded references) makes the issue undispatchable.
 
 <issue-template>
 ## Parent
@@ -72,9 +72,14 @@ A concise description of this vertical slice. Describe the end-to-end behavior, 
 
 ## Blocked by
 
-- A reference to the blocking ticket (if any)
+One bullet per blocker. Each bullet's first token MUST be a backtick-wrapped reference to the blocker's issue file (`` `NN-slug.md` ``); trailing prose / parenthetical context is allowed. Example:
 
-Or "None - can start immediately" if no blockers.
+- `` `01-schema-doc-and-transport-probe.md` `` (the probe event proves the datasource works end-to-end)
+- `` `04-server-time-sync-and-ws-protocol.md` ``
+
+Or `None - can start immediately` on its own line if there are no blockers.
+
+Non-code gates (release-window signals, manual sign-offs, "wait 1 week of telemetry") do NOT belong in this section — they would be silently dropped by the `/run-all-issues` parser and let the loop dispatch an issue whose human gate is unmet. Put them in the issue body, in a separate `## Hold` section, or out of the issue entirely.
 
 </issue-template>
 

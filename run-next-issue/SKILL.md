@@ -38,7 +38,7 @@ List `.matt/issues/*.md`. For each capture:
 - Number `NN` (digits after an optional `done-` prefix)
 - Title (first `#` heading; fallback to filename slug)
 - Done flag (filename starts with `done-`)
-- `Blocked by` references (issue numbers) from the body, if any. Blockers are referenced by number (`01`, `02`), not full filename.
+- `Blocked by` references parsed via the **deterministic Blocker parsing** rules defined in `/run-all-issues` (see its `## Blocker parsing (deterministic)` section). Same rules apply here for parity: bullets must be backtick-wrapped `` `NN-slug.md` `` or hash `#NN` form; `None` / no section means no blockers; anything else fails fast with the same `❌ Issue <NN> has unparseable Blocked by line: <line>` message. Capture the extracted `NN` list.
 
 ### 3. Pick the next issue
 
