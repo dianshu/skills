@@ -13,11 +13,9 @@ Read `~/.claude/matt/issue-tracker.md` and `~/.claude/matt/triage-labels.md` for
 
    If `$PWD/GRILLCOMMITMENTS.md` exists, read it. Treat each active commitment (under `## Commitments`, not superseded in `## Modifications`) as a constraint the PRD must honor — scope, priority, definitions, and quantities stated there override any conflicting assumption you would otherwise make. If a commitment conflicts with what you are about to write, surface the conflict to the user instead of silently overriding it.
 
-2. Sketch out the major modules you will need to build or modify to complete the implementation. Actively look for opportunities to extract deep modules that can be tested in isolation.
+2. Sketch out the seams at which you're going to test the feature. Existing seams should be preferred to new ones. Use the highest seam possible. If new seams are needed, propose them at the highest point you can. The fewer seams across the codebase, the better — the ideal number is one.
 
-A deep module (as opposed to a shallow module) is one which encapsulates a lot of functionality in a simple, testable interface which rarely changes.
-
-Check with the user that these modules match their expectations. Check with the user which modules they want tests written for.
+Check with the user that these seams match their expectations. Check with the user which seams they want tests written for.
 
 3. Write the PRD using the template below, then publish it to the project issue tracker. Apply the `ready-for-agent` triage label — a PRD that comes out of this skill is already fully specified and does not need additional triage.
 
