@@ -9,6 +9,12 @@ Break a plan into independently-grabbable issues using vertical slices (tracer b
 
 Read `~/.claude/matt/issue-tracker.md` and `~/.claude/matt/triage-labels.md` for the issue tracker and triage label configuration.
 
+Workflow position (parallels `/prd` → `/prd-review-loop` → `/prd` publish):
+
+```
+gather → draft slices → quiz user → step 5 publish FILES → /issues-review-loop → step 6 apply triage labels
+```
+
 ## Process
 
 ### 1. Gather context
@@ -51,11 +57,11 @@ Ask the user:
 
 Iterate until the user approves the breakdown.
 
-### 5. Publish the issues to the issue tracker
+### 5. Publish the issue FILES to the issue tracker
 
-For each approved slice, publish a new issue to the issue tracker. Use the issue body template below. Apply the appropriate triage label: AFK slices get `ready-for-agent` (they have a complete plan and acceptance criteria — no further triage needed); HITL slices get `ready-for-human`. Use `needs-triage` only if a slice is genuinely under-specified after this skill ran.
+For each approved slice, write a new issue file to the issue tracker. Use the issue body template below. Publish files in dependency order (blockers first) so you can reference real issue identifiers in the "Blocked by" field. References MUST use the backtick-wrapped filename form (`` `NN-slug.md` ``) — see the template below. The `/run-all-issues` skill enforces this format with a strict bullet parser; any other shape (PR-style `#NN`, plain prose, embedded references) makes the issue undispatchable.
 
-Publish issues in dependency order (blockers first) so you can reference real issue identifiers in the "Blocked by" field. References MUST use the backtick-wrapped filename form (`` `NN-slug.md` ``) — see the template below. The `/run-all-issues` skill enforces this format with a strict bullet parser; any other shape (PR-style `#NN`, plain prose, embedded references) makes the issue undispatchable.
+**Do NOT apply any triage label in this step.** The issues are drafts pending review. Labels are applied in step 6 after `/issues-review-loop` returns EXIT.
 
 <issue-template>
 ## Parent
@@ -86,3 +92,22 @@ Non-code gates (release-window signals, manual sign-offs, "wait 1 week of teleme
 </issue-template>
 
 Do NOT close or modify any parent issue.
+
+### 5.5 Recommend `/issues-review-loop`
+
+After the issue files land, suggest the user run `/issues-review-loop <slug>` to adversarially review the issue set before labelling them ready-for-agent. The review loop will catch:
+
+- Vertical-slice violations (all-backend / all-frontend issues that aren't demoable end-to-end)
+- Undeclared semantic dependencies (issue B uses schema from A but doesn't list A in `## Blocked by`)
+- Granularity drift (multi-day epics or sub-task fragments)
+- Acceptance criteria that aren't observable / testable
+- PRD-coverage gaps (User Stories with no issue, orphan issues)
+- `## Blocked by` parser failures (deterministic regex — anything that would fail `/run-all-issues` preflight)
+
+The user may skip the review (e.g. for a trivial 1-issue split) and go straight to step 6.
+
+### 6. Apply triage labels (after review or skip)
+
+Apply the appropriate triage label to each issue file: AFK slices get `ready-for-agent` (they have a complete plan and acceptance criteria — no further triage needed); HITL slices get `ready-for-human`. Use `needs-triage` only if a slice is genuinely under-specified after `/issues` ran.
+
+Per `~/.claude/matt/issue-tracker.md`, triage state is recorded as a `Status:` line near the top of each issue file.
