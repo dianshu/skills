@@ -2,14 +2,38 @@
 
 The architectural review is rendered as a single self-contained HTML file in the OS temp directory. Tailwind and Mermaid both come from CDNs. Mermaid handles graph-shaped diagrams reliably; hand-built divs and inline SVG handle the more editorial visuals (mass diagrams, cross-sections). Mix the two — don't lean on Mermaid for everything, it'll start to look generic.
 
+## Language
+
+The report is **written in Chinese (中文)**. The discipline from [LANGUAGE.md](LANGUAGE.md) survives translation via a fixed Chinese↔English glossary.
+
+**Render in Chinese:** all headings, prose, badge text, callouts, legends, button labels, and bullet content.
+
+**Keep in English:** code identifiers (module names, file paths, function names, e.g. `OrderHandler`, `PricingClient`, `src/order/intake.ts`); Mermaid keywords and `classDef` names; and the canonical English term in parentheses on **first mention** of each architecture noun (one-time inline tooltip, e.g. *接口（Interface）*).
+
+### Architecture glossary (use these translations consistently)
+
+| 中文 | English | 严禁替换为 |
+|---|---|---|
+| 模块 | Module | 组件 / 服务 / 单元 |
+| 接口 | Interface | API / 签名（这两个只指类型层面） |
+| 实现 | Implementation | — |
+| 深度 / 深 / 浅 | Depth / Deep / Shallow | — |
+| 接缝 | Seam | 边界（与 DDD bounded context 冲突） |
+| 适配器 | Adapter | — |
+| 杠杆 | Leverage | — |
+| 局部性 | Locality | — |
+| 泄漏 | Leakage | 渗透 / 越界 |
+
+Render this glossary in the report header as a compact `<dl>` (definition list) or two-column grid so the reader sees the mapping once at the top. After the glossary block, prose uses only the Chinese term.
+
 ## Scaffold
 
 ```html
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
   <head>
     <meta charset="utf-8" />
-    <title>Architecture review — {{repo name}}</title>
+    <title>架构评审 — {{repo name}}</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script type="module">
       import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
@@ -35,22 +59,22 @@ The architectural review is rendered as a single self-contained HTML file in the
 
 ## Header
 
-Repo name, date, and a compact legend: solid box = module, dashed line = seam, red arrow = leakage, thick dark box = deep module. No introduction paragraph — straight into the candidates.
+Repo name, date, the **architecture glossary** (the table above, rendered as a compact `<dl>` or grid), and a compact legend rendered in Chinese — e.g. *实线方框 = 模块, 虚线 = 接缝, 红色箭头 = 泄漏, 深色加粗方框 = 深模块*. No introduction paragraph — straight into the candidates.
 
 ## Candidate card
 
-The diagrams carry the weight. Prose is sparse, plain, and uses the glossary terms ([LANGUAGE.md](LANGUAGE.md)) without ceremony.
+The diagrams carry the weight. Prose is sparse, plain Chinese, and uses the glossary terms ([LANGUAGE.md](LANGUAGE.md) + the Chinese mapping above) without ceremony.
 
 Each candidate is one `<article>`:
 
-- **Title** — short, names the deepening (e.g. "Collapse the Order intake pipeline").
-- **Badge row** — recommendation strength (`Strong` = emerald, `Worth exploring` = amber, `Speculative` = slate), plus a tag for the dependency category (`in-process`, `local-substitutable`, `ports & adapters`, `mock`).
-- **Files** — monospaced list, `font-mono text-sm`.
-- **Before / After diagram** — the centrepiece. Two columns, side by side. See patterns below.
-- **Problem** — one sentence. What hurts.
-- **Solution** — one sentence. What changes.
-- **Wins** — bullets, ≤6 words each. e.g. "Tests hit one interface", "Pricing logic stops leaking", "Delete 4 shallow wrappers".
-- **ADR callout** (if applicable) — one line in an amber-tinted box.
+- **Title (标题)** — short Chinese phrase, names the deepening (e.g. *"收拢 Order intake 流水线"*).
+- **Badge row** — recommendation strength rendered as Chinese badges: `强烈推荐` = emerald, `值得探索` = amber, `推测性` = slate. Plus a Chinese tag for the dependency category: `进程内` (in-process) / `本地可替代` (local-substitutable) / `端口与适配器` (ports & adapters) / `Mock`.
+- **涉及文件 (Files)** — monospaced list, `font-mono text-sm`. File paths stay in English.
+- **前 / 后 对比图 (Before / After diagram)** — the centrepiece. Two columns, side by side. See patterns below.
+- **问题 (Problem)** — one Chinese sentence. What hurts.
+- **方案 (Solution)** — one Chinese sentence. What changes.
+- **收益 (Wins)** — bullets, ≤8 Chinese characters each where possible. e.g. *"测试只打一个接口"*, *"Pricing 逻辑不再泄漏"*, *"删除 4 个浅包装"*.
+- **ADR 警示 (ADR callout)** (if applicable) — one Chinese line in an amber-tinted box.
 
 No paragraphs of explanation. If the diagram needs a paragraph to be understood, redraw the diagram.
 
@@ -101,23 +125,25 @@ Before: a tree of function calls rendered as nested boxes. After: the same tree 
 
 ## Top recommendation section
 
-One larger card. Candidate name, one sentence on why, anchor link to its card. That's it.
+One larger card titled **首选推荐 (Top recommendation)**. Candidate name (Chinese), one Chinese sentence on why, anchor link to its card. That's it.
 
 ## Tone
 
-Plain English, concise — but the architectural nouns and verbs come straight from [LANGUAGE.md](LANGUAGE.md). Concision is not an excuse to drift.
+Plain Chinese, concise — but the architectural nouns and verbs come straight from the glossary at the top of this file (which mirrors [LANGUAGE.md](LANGUAGE.md)). Concision is not an excuse to drift.
 
-**Use exactly:** module, interface, implementation, depth, deep, shallow, seam, adapter, leverage, locality.
+**Use exactly:** 模块, 接口, 实现, 深度, 深, 浅, 接缝, 适配器, 杠杆, 局部性, 泄漏.
 
-**Never substitute:** component, service, unit (for module) · API, signature (for interface) · boundary (for seam) · layer, wrapper (for module, when you mean module).
+**Never substitute:** 组件 / 服务 / 单元 (for 模块) · API / 签名 (for 接口, except when referring strictly to the type-level surface) · 边界 (for 接缝 — conflicts with DDD bounded context) · 层 / 包装器 (for 模块, when you mean 模块) · 渗透 / 越界 (for 泄漏).
+
+**English code identifiers stay in code form.** Don't translate `OrderHandler` to *订单处理器* or `PricingClient` to *定价客户端* — these are names in the codebase. Surrounding prose is Chinese; the identifier is monospaced English.
 
 **Phrasings that fit the style:**
 
-- "Order intake module is shallow — interface nearly matches the implementation."
-- "Pricing leaks across the seam."
-- "Deepen: one interface, one place to test."
-- "Two adapters justify the seam: HTTP in prod, in-memory in tests."
+- *"Order intake 模块过浅 —— 接口几乎和实现一样宽。"*
+- *"Pricing 越过接缝泄漏。"*
+- *"加深：一个接口，一处测试。"*
+- *"两个适配器才证成接缝：生产用 HTTP，测试用内存版。"*
 
-**Wins bullets** name the gain in glossary terms: *"locality: bugs concentrate in one module"*, *"leverage: one interface, N call sites"*, *"interface shrinks; implementation absorbs the wrappers"*. Don't write *"easier to maintain"* or *"cleaner code"* — those terms aren't in the glossary and don't earn their place.
+**收益 bullets** name the gain in glossary terms: *"局部性：bug 集中到一个模块"*, *"杠杆：一个接口 N 个调用点"*, *"接口收窄；实现吸收掉包装层"*. Don't write *"更易维护"* or *"代码更整洁"* — these aren't in the glossary and don't earn their place.
 
-No hedging, no throat-clearing, no "it's worth noting that…". If a sentence could be a bullet, make it a bullet. If a bullet could be cut, cut it. If a term isn't in [LANGUAGE.md](LANGUAGE.md), reach for one that is before inventing a new one.
+No hedging, no throat-clearing, no "值得一提的是…" / "需要注意…". If a sentence could be a bullet, make it a bullet. If a bullet could be cut, cut it. If a term isn't in the glossary above, reach for one that is before inventing a new one.

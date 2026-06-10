@@ -48,6 +48,8 @@ Apply the **deletion test** to anything you suspect is shallow: would deleting i
 
 Write a self-contained HTML file to the OS temp directory so nothing lands in the repo. Resolve the temp dir from `$TMPDIR`, falling back to `/tmp` (or `%TEMP%` on Windows), and write to `<tmpdir>/architecture-review-<timestamp>.html` so each run gets a fresh file. Open it for the user — `xdg-open <path>` on Linux, `open <path>` on macOS, `start <path>` on Windows — and tell them the absolute path.
 
+**Report language: Chinese (中文).** All headings, prose, badges, callouts, legends, and bullet content are written in Chinese. Architecture vocabulary uses the Chinese glossary in [HTML-REPORT.md](HTML-REPORT.md) (e.g. *模块 / 接口 / 接缝 / 适配器*) and keeps the canonical English term in parentheses on first mention so the precision from [LANGUAGE.md](LANGUAGE.md) survives translation. Code identifiers (module names, file paths, function names, Mermaid keywords) stay in English.
+
 The report uses **Tailwind via CDN** for layout and styling, and **Mermaid via CDN** for diagrams where a graph/flow/sequence reliably communicates the structure. Mix Mermaid with hand-crafted CSS/SVG visuals — use Mermaid when relationships are graph-shaped (call graphs, dependencies, sequences), and hand-built divs/SVG when you want something more editorial (mass diagrams, cross-sections, collapse animations). Each candidate gets a **before/after visualisation**. Be visual.
 
 For each candidate, the same template as before, but rendered as a card:
