@@ -1,6 +1,6 @@
 ---
 name: tdd
-description: Test-driven development. Use when the user wants to build features or fix bugs test-first, mentions "red-green-refactor", or wants integration tests.
+description: Test-driven development — the default approach for implementing new features and fixing behavioral bugs. Use when the user wants to build a feature, add functionality, implement something new, fix a bug that changes runtime behavior, or refactor with behavior changes — regardless of whether TDD is explicitly mentioned. Also triggers on explicit phrases: "TDD", "test-driven", "test-first", "red-green", "red-green-refactor", "write tests first", "integration tests", "add tests then implement", "带测试写", "先写测试", "测试驱动", "TDD 实现", "红绿循环", "红绿". Do NOT trigger for: pure exploration/reading, docs or config-only edits, renames or reformatting, or when the user explicitly opts out with "no tests" / "skip tests" / "quick fix" / "one-liner" / "just a small change" / "不写测试" / "跳过测试" / "先不测" / "只改一行" / "小改动" / "快速改一下".
 ---
 
 # Test-Driven Development
