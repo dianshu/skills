@@ -11,7 +11,9 @@ Ask the questions one at a time, waiting for feedback on each question before co
 
 When a question offers the user multiple directions to choose from, follow `~/.claude/injected-rules/question-format.md`: prefer `AskUserQuestion`, otherwise label each option with a short number/tag and place your recommended answer as **#1** with a positively-phrased label.
 
-If a question can be answered by exploring the codebase, explore the codebase instead.
+If a *fact* can be found by exploring the codebase, look it up rather than asking me. The *decisions*, though, are mine — put each one to me and wait for my answer.
+
+Do not enact the plan until I confirm we have reached a shared understanding.
 
 </what-to-do>
 
