@@ -90,7 +90,7 @@ Each iteration:
 
    Hard rules for this subagent:
    - NEVER ask the user a question. NEVER wait for confirmation.
-   - Skip /tdd's planning-confirmation prompt and any "ready to proceed?" gates by proceeding with your best judgment.
+   - Skip /tdd's seams-confirmation prompt and any "ready to proceed?" gates by proceeding with your best judgment.
    - Do NOT run git push, /push, or anything that creates a PR.
    - The expected next issue number is <EXPECTED_NN> ("<EXPECTED_TITLE>"). If /run-next-issue selects a different one, still let it complete — the main loop will reconcile.
    - When fully done, output exactly ONE line in this format and nothing else:
