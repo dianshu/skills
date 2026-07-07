@@ -1,11 +1,11 @@
 ---
 name: run-all-issues
-description: Serially drain all pending issues in the current .matt/ workspace by dispatching one general-purpose subagent per issue (each running /run-next-issue → /tdd → /finalize). Main loop handles preflight, feature-branch setup, per-issue commits, and fail-fast termination. Use when user says "run all issues", "finish all issues", "drain issues", "/run-all-issues", "做完所有 issue", or "串行跑完".
+description: Serially drain all pending issues in the current .matt/ workspace by dispatching one general-purpose subagent per issue (each running /tdd + /code-review self-review). The main loop owns issue selection, a deterministic test gate, independent external review (via the review Workflow), and the done- rename + per-issue commit. Use when user says "run all issues", "finish all issues", "drain issues", "/run-all-issues", "做完所有 issue", or "串行跑完".
 ---
 
 # Run All Issues
 
-Drain every pending issue in `.matt/issues/` in dependency order, each in its own subagent for context isolation. Main loop is deterministic; subagent text is logged but never drives decisions.
+Drain every pending issue in `.matt/issues/` in dependency order, each implemented in its own subagent for context isolation. The main loop is deterministic: it selects each issue, gates on a real test run, drives an independent external review via the `Workflow` tool, and owns the `done-` rename + commit. Subagent text is logged but never drives decisions — completion is detected from git + tests, never from a subagent's final message.
 
 ## Preconditions (user must arrange before calling)
 
@@ -66,111 +66,106 @@ For an issue file, take the first line matching `^#[ \t]+(.+?)[ \t]*$` — the c
 Before the loop:
 
 - `PENDING_COUNT` = number of files in `.matt/issues/` whose name does NOT start with `done-`.
-- `MAX = PENDING_COUNT + 5`.
+- `MAX = PENDING_COUNT + 5` (outer iteration cap).
 - `ROUNDS = 0`.
+- `IMPLEMENT_MAX = 2` — per-issue cap on implement/self-review dispatches before the deterministic test gate fails fast.
+- `REVIEW_MAX = 3` — per-issue cap on external-review → fix rounds before residual New-Blocking findings are logged won't-fix and the issue is committed anyway.
 
 Each iteration:
 
 1. `ROUNDS++`. If `ROUNDS > MAX` → fail-fast: `❌ Exceeded iteration cap (MAX=<MAX>); ran <ROUNDS-1> rounds`.
-2. Snapshot `BEFORE` = sorted list of `done-*.md` filenames in `.matt/issues/`.
-3. Build `PENDING` = sorted list of pending issue files (no `done-` prefix).
+2. Build `PENDING` = sorted list of pending issue files (no `done-` prefix).
    - If `PENDING` is empty → exit main loop and proceed to **Post-drain verification** below. Do NOT print the `✅ Done` line yet — it is printed only after verification converges.
-4. Compute `RUNNABLE` = pending issues whose blockers are all done (via Blocker parsing).
+3. Compute `RUNNABLE` = pending issues whose blockers are all done (via Blocker parsing).
    - If `RUNNABLE` is empty → fail-fast: `⚠️ Stuck: <comma-separated NN list> blocked by unfinished issues`.
-5. Pick `EXPECTED` = the issue in `RUNNABLE` with the smallest `NN`. Parse its title (Title parsing). Store `EXPECTED_NN`, `EXPECTED_TITLE`.
-6. Dispatch one subagent with the Agent tool:
-   - `subagent_type: general-purpose`
-   - `description: run next issue`
-   - `prompt`: exactly the block below.
+4. Pick `EXPECTED` = the issue in `RUNNABLE` with the smallest `NN`. Parse its title (Title parsing). Store `EXPECTED_NN`, `EXPECTED_TITLE`, and `EXPECTED_PATH` (= `.matt/issues/<EXPECTED_NN>-<slug>.md`). Reset per-issue counters `IMPLEMENT_ROUNDS = 0`, `REVIEW_ROUNDS = 0`, and an empty per-issue `WONTFIX` list.
+5. **Dispatch implement + self-review subagent.** `IMPLEMENT_ROUNDS++`. Dispatch one subagent with the Agent tool (`subagent_type: general-purpose`, `description: implement issue <EXPECTED_NN>`), `prompt` = the **Implement + self-review subagent prompt** below with `<PATH>` replaced by `EXPECTED_PATH`. The subagent implements via `/tdd` and self-reviews via `/code-review` — two shallow `Skill` calls, no deeper nesting. It does NOT run the external review, `/finalize`, rename, commit, or push.
+6. **Deterministic test gate.** Resolve the project test command using `/finalize` step-5a order — the first that resolves: `.claude/scripts/test.sh` → `Makefile` `test` target (`make test`) → `package.json` `scripts.test` (`npm test`). If none resolves → fail-fast: `❌ No test command for issue <EXPECTED_NN> (checked .claude/scripts/test.sh, Makefile test, package.json scripts.test)` — do NOT `AskUserQuestion` (it can hit the same harness bug inside the autonomous loop). Then require BOTH:
+   - work tree is **dirty** (`git status --porcelain` non-empty), AND
+   - the test command exits **0**.
 
+   If either check fails: when `IMPLEMENT_ROUNDS < IMPLEMENT_MAX` → go back to step 5 (re-dispatch the implement subagent). Otherwise fail-fast with the diagnostic block:
    ```
-   You are running inside an autonomous "run all issues" loop. Treat the issue file(s) under .matt/issues/ and their acceptance criteria as already pre-approved by the user.
-
-   In the current working directory (do NOT cd into .matt/), invoke the Skill tool with /run-next-issue. It will pick the next executable issue and drive /tdd → /finalize to completion.
-
-   Hard rules for this subagent:
-   - NEVER ask the user a question. NEVER wait for confirmation.
-   - Skip /tdd's seams-confirmation prompt and any "ready to proceed?" gates by proceeding with your best judgment.
-   - Do NOT run git push, /push, or anything that creates a PR.
-   - The expected next issue number is <EXPECTED_NN> ("<EXPECTED_TITLE>"). If /run-next-issue selects a different one, still let it complete — the main loop will reconcile.
-   - When fully done, output exactly ONE line in this format and nothing else:
-     RESULT issue=<NN> title="<TITLE>" finalize=<pass|fail>
-
-   CRITICAL closing protocol — /finalize's review summary at the end of /run-next-issue tends to crowd out this RESULT line:
-   - Do NOT emit a code review, findings list, JSON-formatted analysis, "## Finalize Summary" block, "Won't-fix items" list, "Review rounds completed" header, or any text other than the RESULT line in your final message. The outer loop only reads the LAST message.
-   - Do NOT forget the .matt/issues/<NN>-<slug>.md → done-<NN>-<slug>.md rename. The rename is the SOLE signal the outer loop uses to detect completion.
-   - If /finalize printed a summary right before you stop, your job is NOT done — you must still rename the file and emit the RESULT line as a separate final message.
+   ❌ Failed at issue <EXPECTED_NN> "<EXPECTED_TITLE>": implementation gate not met after <IMPLEMENT_MAX> attempts (<clean work tree | tests failing>).
+   --- git status --porcelain ---
+   <output>
+   --- git diff --stat ---
+   <output>
    ```
-
-7. After the subagent returns, snapshot `AFTER` = sorted list of `done-*.md` filenames.
-8. Integrity checks (before commit):
-   - `BEFORE - AFTER` must be empty. If not → fail-fast: `❌ Done file removed: <list>`.
-   - Re-run the filename-shape + no-duplicate-NN invariant from preflight step 3. Any violation → fail-fast: `❌ Invariant broken: <details>`.
-9. Compute `DELTA = AFTER - BEFORE`.
-   - If `|DELTA| == 0`:
-     - This iteration's dispatch was the **first attempt** for `EXPECTED_NN`: classify by whether the subagent did substantive work, then retry accordingly. Run `git status --porcelain` once and inspect.
-       - **Close-out drift** (work-tree is dirty AND the expected `NN-<slug>.md` is still present in `.matt/issues/`): the subagent successfully ran `/tdd` + `/finalize` and left implementation diff on disk, but its final message was `/finalize`'s reviewer summary (JSON findings array, "## Finalize Summary" block, "Won't-fix items" list) instead of the required `RESULT issue=...` line, so it also skipped the `done-` rename. Empirically very common — measured at 8 of 10 dispatches in a recent drain. Log `↻ close-out retry issue <EXPECTED_NN> "<EXPECTED_TITLE>" (work-tree has <N> changes; rename + RESULT missing)`. Dispatch a **close-out-only retry** using the prompt template in **Close-out-only retry prompt** below (NOT the full `/run-next-issue` prompt — that would re-run implementation work that's already on disk). Typical cost 10-30s, ~80k tokens, 1-6 tool uses.
-       - **Empty-result drift** (work-tree is clean OR dirty diff is unrelated to the issue): the subagent did not do the work, or did something but left no trace. Log `↻ retry issue <EXPECTED_NN> "<EXPECTED_TITLE>" (no done file produced on first attempt)` and re-dispatch the original full `/run-next-issue` subagent prompt from step 6.
-       - In both cases: do NOT increment `ROUNDS` — the retry counts as part of the same iteration. Go back to step 7 after the retry returns.
-     - This iteration's dispatch was the **retry attempt** and DELTA is still 0 → fail-fast with the full diagnostic block below. Run these three commands and embed their output verbatim:
-       ```bash
-       git status --porcelain
-       git diff --stat
-       git diff --stat --cached
-       ```
-       Format:
-       ```
-       ❌ Failed at issue <EXPECTED_NN> "<EXPECTED_TITLE>" after retry (no done file produced).
-       --- git status --porcelain ---
-       <output>
-       --- git diff --stat ---
-       <output>
-       --- git diff --stat --cached ---
-       <output>
-       ```
-   - If `|DELTA| >= 2` or the single delta's `NN` ≠ `EXPECTED_NN` → fail-fast: `❌ Unexpected done-set change: expected <EXPECTED_NN>, got <actual list>` (no retry — this is a state corruption signal, not a flake).
-
-### Close-out-only retry prompt
-
-Used by step 9's close-out drift branch. Do NOT include the original `/run-next-issue` instructions — the implementation is already on disk; re-dispatching the full prompt would either (a) duplicate work or (b) hit the same drift on the second `/finalize` pass. The prompt is a pure file-rename + RESULT-emission task with the diagnostic context the subagent needs to know it's a recovery, not a fresh run.
-
-Substitute `<NN>`, `<SLUG>` (e.g. `litert-lm-vision-stub-cancel-wrapper`), `<FEATURE>` (the SLUG captured in preflight step 3), and `<GIT_STATUS>` (verbatim `git status --porcelain` output).
-
-```
-In the current working directory, a previous subagent ran /run-next-issue
-for issue <NN> ("<NN>-<SLUG>") and completed implementation, but its
-final message was /finalize's reviewer summary instead of the required
-RESULT line, so it also skipped the done- rename.
-
-Current work-tree (DO NOT modify these files — the outer loop will
-commit them next):
-
-<GIT_STATUS>
-
-Your ONLY job:
-(a) Rename .matt/issues/<NN>-<SLUG>.md → .matt/issues/done-<NN>-<SLUG>.md
-(b) Mirror to backup per .matt/CLAUDE.md sync rule:
-    rm ~/.claude/matt/features/<FEATURE>/issues/<NN>-<SLUG>.md
-    && cp .matt/issues/done-<NN>-<SLUG>.md ~/.claude/matt/features/<FEATURE>/issues/done-<NN>-<SLUG>.md
-(c) Final message MUST be exactly one line and nothing else:
-    RESULT issue=<NN> title="<NN>-<SLUG>" finalize=pass
-
-Do NOT git commit. Do NOT re-run /tdd, /finalize, or any tests. Do NOT
-emit code review, findings, or summary text. Do NOT modify any source
-files. Anything other than the RESULT line in your final message will
-cause the outer loop to re-dispatch.
-```
-10. Commit:
-    - `NN` = `EXPECTED_NN`; `TITLE` = title parsed from the new `done-NN-*.md` file (Title parsing). If parsing somehow fails on the renamed file, fall back to `EXPECTED_TITLE` captured before dispatch.
-    - Run exactly:
-      ```bash
-      git add -A && printf '%s: %s\n' "$NN" "$TITLE" | git commit -F -
+7. **Independent external review (Workflow, work tree) + fix loop.** A second opinion distinct from the subagent's own `/code-review`, run on the **uncommitted** work tree (the review scripts diff only uncommitted changes — this is why review runs per-issue, before the step-8 commit).
+   a. Dispatch the review via the `Workflow` tool for **both** backends in one message (two calls), matching `/finalize` step 2's rigor:
       ```
-      - `git add -A` (not `git commit -a`) so untracked files produced by /tdd or /finalize are included.
-      - `git commit -F -` (stdin) so titles with quotes/backticks/newlines are not interpolated through the shell.
-    - If `git commit` exits non-zero → fail-fast: `❌ Commit failed at issue <NN>: <last line of stderr>`. Leave the working tree as-is for inspection; do NOT revert the `done-` rename.
-11. Post-commit isolation check: `git status --porcelain` must be empty. If not → fail-fast: `❌ Post-commit dirty after issue <NN>: <porcelain output>`.
-12. Log one line and continue: `· <NN> "<TITLE>" finalize=<pass> commit=<short-sha>` (using `git rev-parse --short HEAD`).
+      Workflow({scriptPath: '~/.claude/skills/review-with-agent/review.workflow.js', args: {mode: 'code', backend: 'codex'}})
+      Workflow({scriptPath: '~/.claude/skills/review-with-agent/review.workflow.js', args: {mode: 'code', backend: 'opencode'}})
+      ```
+      (Single-backend — codex only — is a documented speed knob when a run must go faster.)
+   b. For each result: if it is `{aborted: true, ...}` or the Workflow tool itself errored (backend CLI down), log `⚠️ review skipped (<backend>): <reason>` and treat it as contributing zero findings. If **both** are skipped → log `⚠️ review skipped (both backends) for issue <EXPECTED_NN>` and go to step 8 (never wedge the drain on a missing reviewer).
+   c. **Deterministic Fix/Won't-Fix triage** (rule-based on finding fields — no LLM). Over the union of both results' `findings`:
+      - **Fix-set** = findings where `origin === 'New'` AND `severity === 'Blocking'` AND NOT (`verification` present with `decision === 'Dismiss'`) — new, blocking, and not refuted by the workflow's own adversarial verification pass.
+      - **Won't-fix** = every other finding (Pre-existing, Required/Suggestion, or a New-Blocking whose `verification.decision === 'Dismiss'`). Append each to the per-issue `WONTFIX` list for the drain-end summary; do NOT re-send them to reviewers.
+   d. If the **Fix-set is empty** → go to step 8. This is the loop-exit: it covers verdict `PASS`, and also `CONTESTED`/`REJECT` whose blockers were all refuted or Pre-existing. Keying on the Fix-set (not the raw verdict) is deliberate — a refuted or pre-existing blocker must not wedge the loop.
+   e. Otherwise, if `REVIEW_ROUNDS < REVIEW_MAX`: `REVIEW_ROUNDS++`, dispatch a **lean fix subagent** (Agent tool, `subagent_type: general-purpose`) with the **Fix subagent prompt** below, substituting `<COMPACT_FINDINGS>` = one line per Fix-set finding (`<file>:<line> — <description>`, plus `verification.evidence` when present). After it returns, **re-run step 6's gate** (dirty + tests green; on failure follow step 6's retry/fail-fast), then loop back to (a).
+   f. If `REVIEW_ROUNDS >= REVIEW_MAX` and the Fix-set is still non-empty → log `⚠️ review did not converge for issue <EXPECTED_NN>; <N> New-Blocking finding(s) carried as won't-fix`, append the residual Fix-set to `WONTFIX`, and go to step 8 (one stubborn finding must not wedge the drain — mirrors `/finalize`'s second exit condition).
+8. **Rename + commit (deterministic — the main loop owns this; it is the SOLE completion signal).**
+   - `NN` = `EXPECTED_NN`. `git mv <EXPECTED_PATH> .matt/issues/done-<EXPECTED_NN>-<slug>.md`.
+   - `TITLE` = title parsed from the new `done-` file (Title parsing); fall back to `EXPECTED_TITLE` if parsing fails.
+   - Commit exactly:
+     ```bash
+     git add -A && printf '%s: %s\n' "$NN" "$TITLE" | git commit -F -
+     ```
+     - `git add -A` (not `git commit -a`) so untracked files produced by `/tdd` are included.
+     - `git commit -F -` (stdin) so titles with quotes/backticks/newlines are not interpolated through the shell.
+   - If `git commit` exits non-zero → fail-fast: `❌ Commit failed at issue <NN>: <last line of stderr>`. Leave the tree as-is for inspection; do NOT revert the `done-` rename.
+   - Post-commit isolation check: `git status --porcelain` must be empty. If not → fail-fast: `❌ Post-commit dirty after issue <NN>: <porcelain output>`.
+9. Log one line and continue: `· <NN> "<TITLE>" review=<PASS|fixed:<n>|skipped|wontfix:<n>> commit=<short-sha>` (via `git rev-parse --short HEAD`). Carry the per-issue `WONTFIX` list forward for the drain-end summary.
+
+## Subagent prompts
+
+Both are dispatched with the Agent tool (`subagent_type: general-purpose`). The subagent implements only — it never runs the external review, renames the issue file, commits, or pushes; those are the main loop's job.
+
+### Implement + self-review subagent prompt
+
+Substitute `<PATH>` with `EXPECTED_PATH` before dispatch.
+
+```
+You are one worker in an autonomous "run all issues" loop. Treat the issue file and its
+acceptance criteria as already pre-approved by the user.
+
+Your job, in order:
+1. Implement the issue at `<PATH>` in the current working directory using TDD: invoke the Skill
+   tool with /tdd and drive it red -> green, tests passing. The issue file is the full contract.
+2. Self-review: invoke the Skill tool with /code-review on your own work-tree diff and FIX every
+   finding you agree with, keeping tests green. This is your first-party review pass.
+
+Hard rules:
+- NEVER ask a question or wait for confirmation. Skip any "ready to proceed?" gate with best judgment.
+- Do NOT invoke /finalize. Do NOT invoke /codex-review or /opencode-review — the main loop runs the
+  independent external review. Do NOT rename/move the issue file. Do NOT git commit. Do NOT git push
+  or open a PR. The main loop owns the external review, rename, and commit.
+- Leave your implementation + tests + fixes in the working tree.
+- Stop once tests pass via the project's test command. Final message: one line summarizing what you
+  implemented (the loop reads state from git + tests, not your text).
+```
+
+### Fix subagent prompt
+
+Substitute `<COMPACT_FINDINGS>` with one line per Fix-set finding (`<file>:<line> — <description>`, plus `verification.evidence` when present).
+
+```
+You are one worker in an autonomous "run all issues" loop, resolving code-review findings on an
+already-implemented issue in the current working directory (changes are uncommitted in the work tree).
+
+Findings to resolve (independent reviewer):
+<COMPACT_FINDINGS>
+
+Your ONLY job: edit the work-tree code to resolve every New Blocking finding above while keeping
+all tests green (run the project test command). Use /tdd if a finding needs a new test.
+
+Hard rules:
+- NEVER ask a question. Do NOT rename the issue file, git commit, or push. Do NOT invoke
+  /finalize or run your own review. Leave fixes in the work tree.
+- Stop when done and tests pass; final message = one-line summary.
+```
 
 ## Post-drain verification loop
 
@@ -202,20 +197,18 @@ On successful convergence (step 4 clean), print the original termination line: `
 
 Hard constraint for this loop: **never create new issue files**. The drain phase is over; fixes are surgical.
 
-## Selection contract (drift policy)
+## Selection contract
 
-The main loop computes `EXPECTED` with this skill's deterministic blocker parser. `/run-next-issue` references the same `## Blocker parsing (deterministic)` rules, so both sides should agree on every well-formed file (preflight step 8 guarantees every pending file IS well-formed). If they still disagree and the resulting `DELTA` does not match `EXPECTED`, the loop fails fast at step 9 — drift is treated as a real signal, not a false positive. Do not try to reconcile by editing `/run-next-issue` or by skipping the subagent and renaming files directly.
+The main loop is the **sole** issue selector and the **sole** renamer: it computes `EXPECTED` with this skill's deterministic blocker parser (step 4), hands the subagent exactly that one file path (`EXPECTED_PATH`) to implement, and performs the `done-` rename itself (step 8). The subagent never selects, renames, or commits — so there is no selection drift to reconcile and no `done-`-set delta to interpret. `/run-next-issue` is not on this path.
 
 ## Termination report formats
 
 Print exactly one of these as the final line(s):
 
-- `✅ Done: <N> issues completed` + list of `done-NN: <title>` lines.
+- `✅ Done: <N> issues completed` + list of `done-NN: <title>` lines. When any issue carried won't-fix findings, append one `⚠️ Won't-fix (issue NN): <file>:<line> — <description>` line per residual finding so the user can follow up.
 - `⚠️ Stuck: <NN-list> blocked by unfinished issues`.
-- `❌ Failed at issue <NN> "<title>" after retry (no done file produced).` followed by `git status --porcelain` / `git diff --stat` / `git diff --stat --cached` blocks.
-- `❌ Unexpected done-set change: expected <NN>, got <list>`.
-- `❌ Done file removed: <list>`.
-- `❌ Invariant broken: <details>`.
+- `❌ Failed at issue <NN> "<title>": implementation gate not met after <IMPLEMENT_MAX> attempts (<clean work tree | tests failing>).` followed by `git status --porcelain` / `git diff --stat` blocks.
+- `❌ No test command for issue <NN> (checked .claude/scripts/test.sh, Makefile test, package.json scripts.test)`.
 - `❌ Commit failed at issue <NN>: <reason>`.
 - `❌ Post-commit dirty after issue <NN>: <porcelain>`.
 - `❌ Exceeded iteration cap (MAX=<MAX>); ran <N> rounds`.
@@ -226,6 +219,6 @@ Print exactly one of these as the final line(s):
 
 - `git push` / PR creation (commit-behavior.md).
 - Parallel issue execution.
-- Editing `/run-next-issue`, `/tdd`, or `/finalize`.
+- Editing `/tdd`, `/code-review`, or `review.workflow.js` (this skill orchestrates them; it does not modify them).
 - Cross-feature runs (one `.matt/` workspace per invocation).
 - Rebase / squash / tag operations beyond the per-issue commits.

@@ -7,6 +7,8 @@ description: Pick the next pending issue from the local .matt/ workspace based o
 
 Pick the next executable issue from `.matt/issues/` and drive it to completion.
 
+> **Note:** `/run-all-issues` no longer calls `/run-next-issue`. It selects each issue itself, dispatches a subagent that runs `/tdd` + `/code-review` directly, and owns the independent external review, `done-` rename, and commit in its own main loop. This skill remains for standalone, single-issue human use — its behavior below is unchanged.
+
 ## Preconditions
 
 Current working directory must contain a `.matt/` workspace with:
