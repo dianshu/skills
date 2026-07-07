@@ -2,6 +2,40 @@
 
 How to deepen a cluster of shallow modules safely, given its dependencies. Assumes the vocabulary in [LANGUAGE.md](LANGUAGE.md) — **module**, **interface**, **seam**, **adapter**.
 
+## Deep vs shallow modules
+
+From John Ousterhout's *A Philosophy of Software Design*:
+
+**Deep module** = small interface + lots of implementation
+
+```
+┌─────────────────────┐
+│   Small Interface   │  ← Few methods, simple params
+├─────────────────────┤
+│                     │
+│                     │
+│  Deep Implementation│  ← Complex logic hidden
+│                     │
+│                     │
+└─────────────────────┘
+```
+
+**Shallow module** = large interface + little implementation (avoid)
+
+```
+┌─────────────────────────────────┐
+│       Large Interface           │  ← Many methods, complex params
+├─────────────────────────────────┤
+│  Thin Implementation            │  ← Just passes through
+└─────────────────────────────────┘
+```
+
+Spotting deepening candidates — ask:
+
+- Can I reduce the number of methods?
+- Can I simplify the parameters?
+- Can I hide more complexity inside?
+
 ## Dependency categories
 
 When assessing a candidate for deepening, classify its dependencies. The category determines how the deepened module is tested across its seam.
