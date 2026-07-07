@@ -5,7 +5,7 @@ Forked from [mattpocock/skills](https://github.com/mattpocock/skills).
 ## Upstream Sync
 
 - **Upstream:** https://github.com/mattpocock/skills
-- **Fork point:** `6eeb81b` (Added PR's as a triage surface)
+- **Fork point:** `16a2a5c` (upstream main as of 2026-07-06)
 
 ### Skill mapping notes
 
