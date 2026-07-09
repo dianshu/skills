@@ -1,6 +1,6 @@
 ---
 name: diagnose
-description: Disciplined diagnosis loop for hard bugs and performance regressions. Reproduce → minimise → hypothesise → instrument → fix → regression-test. Use when user says "diagnose this" / "debug this", reports a bug, says something is broken/throwing/failing, or describes a performance regression.
+description: Disciplined diagnosis loop — the default approach for investigating any bug, failure, or performance regression whose root cause isn't yet pinned down. Reproduce → minimise → hypothesise → instrument → fix → regression-test. Use when the user reports something broken/throwing/failing/crashing, wrong or unexpected output, a hang, slowdown, or perf regression, or asks why something is happening or what's causing it — regardless of whether "diagnose"/"debug" is explicitly mentioned. Also triggers on explicit phrases: "diagnose this", "debug this", "debug", "root cause", "figure out why", "track down", "investigate this bug", "why is this failing/broken", "诊断", "调试", "排查", "定位问题", "找根因", "根因", "查一下为什么", "复现". Do NOT trigger for: pure exploration/reading, docs or config-only edits, or a bug whose cause is already known and you only need to implement the fix (use /tdd) — or when the user explicitly opts out with "quick fix", "just fix it", "I know the cause", "skip diagnosis", "直接改", "我知道原因", "不用排查", "快速修一下".
 ---
 
 # Diagnose
