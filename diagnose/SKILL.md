@@ -109,6 +109,12 @@ Tool preference:
 
 ## Phase 5 — Fix + regression test
 
+### Locate the fix
+
+Before writing the fix, grep every caller of the function you're about to change. If multiple callers hit the same bug, fix the shared function once — a per-caller patch leaves siblings broken and produces a bigger diff. Only patch per-caller when the callers have genuinely divergent behavior.
+
+### Regression test
+
 Write the regression test **before the fix** — but only if there is a **correct seam** for it.
 
 A correct seam is one where the test exercises the **real bug pattern** as it occurs at the call site. If the only available seam is too shallow (single-caller test when the bug needs multiple callers, unit test that can't replicate the chain that triggered the bug), a regression test there gives false confidence.
