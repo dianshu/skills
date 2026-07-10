@@ -7,6 +7,27 @@ description: Serially drain all pending issues in the current .matt/ workspace b
 
 Drain every pending issue in `.matt/issues/` in dependency order, each implemented in its own subagent for context isolation. The main loop is deterministic: it selects each issue, gates on a real test run, drives an independent external review via the `Workflow` tool, and owns the `done-` rename + commit. Subagent text is logged but never drives decisions — completion is detected from git + tests, never from a subagent's final message.
 
+## Autonomous mode — do NOT `AskUserQuestion`
+
+This skill runs unattended. `AskUserQuestion` is **banned** during the main loop and post-drain verification, with exactly two exceptions:
+
+1. **Preflight step 1** (YOLO mode check) — the single required upfront ask. Everything else in Preflight uses fail-fast messages, not asks.
+2. **Destructive git operations** you didn't already plan (`git reset --hard`, `git push --force`, `git branch -D`, tag deletion). If a destructive op becomes unavoidable mid-run (e.g. a subagent violated the no-commit clause and created a rogue commit that must be un-done), `commit-behavior.md` requires explicit user consent.
+
+**Explicitly forbidden asks** (these are the traps this ban is here to prevent — every one of them has a deterministic answer already in this skill):
+
+| Tempting ask | Correct action |
+|---|---|
+| "Fix these Accept-verified Required findings?" | They're already in the Fix-set (step 7c); auto-fix. |
+| "Fix these un-verified/Suggestion findings?" | They're won't-fix (step 7c); log to ledger, move on. |
+| "REVIEW_MAX reached, add another round?" | Step 7f says commit anyway. Don't override. |
+| "This Blocking is an AC violation — fix?" | Already in Fix-set; auto-fix without asking. |
+| "This finding seems out-of-scope, skip?" | Not marked out-of-scope in the issue's `.md` = in-scope. |
+| "Impl subagent looks stuck, redo?" | Step 6's `IMPLEMENT_MAX` handles it; wait or fail-fast per that step. |
+| "Which of these two fix approaches?" | Whichever the fix-subagent picks. Trust it or run the loop again. |
+
+The reviewer's `AcceptanceConformance` lens (step 7a) is designed to grade real AC violations as `Blocking`. Step 7c's `Required + Accept` branch is the backstop — even if the AC lens misses one and the reviewer defaults to `Required`, verifier-confirmed Requireds still auto-fix. Findings that leak past BOTH nets are Suggestion-tier or un-verified — record them in the won't-fix ledger for the user to triage post-drain. That IS the design; do not paper over it by asking.
+
 ## Preconditions (user must arrange before calling)
 
 - `.matt/` workspace is already loaded (`/load-feature <slug>` was run).
@@ -68,8 +89,8 @@ Before the loop:
 - `PENDING_COUNT` = number of files in `.matt/issues/` whose name does NOT start with `done-`.
 - `MAX = PENDING_COUNT + 5` (outer iteration cap).
 - `ROUNDS = 0`.
-- `IMPLEMENT_MAX = 2` — per-issue cap on implement/self-review dispatches before the deterministic test gate fails fast.
-- `REVIEW_MAX = 3` — per-issue cap on external-review → fix rounds before residual New-Blocking findings are logged won't-fix and the issue is committed anyway.
+- `IMPLEMENT_MAX = 5` — per-issue cap on implement/self-review dispatches before the deterministic test gate fails fast.
+- `REVIEW_MAX = 10` — per-issue cap on external-review → fix rounds before residual Fix-set findings are logged won't-fix and the issue is committed anyway.
 
 Each iteration:
 
@@ -101,11 +122,15 @@ Each iteration:
       (Single-backend — codex only — is a documented speed knob when a run must go faster.) Every re-run of this step in the fix loop (step 7e) MUST also pass `issuePath: EXPECTED_PATH`.
    b. For each result: if it is `{aborted: true, ...}` or the Workflow tool itself errored (backend CLI down), log `⚠️ review skipped (<backend>): <reason>` and treat it as contributing zero findings. If **both** are skipped → log `⚠️ review skipped (both backends) for issue <EXPECTED_NN>` and go to step 8 (never wedge the drain on a missing reviewer).
    c. **Deterministic Fix/Won't-Fix triage** (rule-based on finding fields — no LLM). Over the union of both results' `findings`:
-      - **Fix-set** = findings where `origin === 'New'` AND `severity === 'Blocking'` AND NOT (`verification` present with `decision === 'Dismiss'`) — new, blocking, and not refuted by the workflow's own adversarial verification pass.
-      - **Won't-fix** = every other finding (Pre-existing, Required/Suggestion, or a New-Blocking whose `verification.decision === 'Dismiss'`). Append each to the per-issue `WONTFIX` list for the drain-end summary; do NOT re-send them to reviewers.
+      - **Fix-set** = findings where `origin === 'New'` AND NOT (`verification` present with `decision === 'Dismiss'`) AND EITHER:
+        - `severity === 'Blocking'` (auto-enters unless verifier's adversarial pass refuted it), OR
+        - `severity === 'Required'` AND `verification` present AND `verification.decision === 'Accept'` (verifier-confirmed real).
+
+        Rationale: reviewers systematically under-grade AC violations as `Required` (they don't have the issue's AC in their evaluation frame). The Accept-verified Required branch promotes those real design/correctness bugs to auto-fix without letting un-verified nit-tier Requireds churn the loop. `verification: null` Required stays out — no verifier signal = no auto-fix.
+      - **Won't-fix** = every other finding (Pre-existing anything, Suggestion, un-verified Required, or a Dismissed New Blocking/Required). Append each to the per-issue `WONTFIX` list for the drain-end summary; do NOT re-send them to reviewers.
    d. If the **Fix-set is empty** → go to step 8. This is the loop-exit: it covers verdict `PASS`, and also `CONTESTED`/`REJECT` whose blockers were all refuted or Pre-existing. Keying on the Fix-set (not the raw verdict) is deliberate — a refuted or pre-existing blocker must not wedge the loop.
-   e. Otherwise, if `REVIEW_ROUNDS < REVIEW_MAX`: `REVIEW_ROUNDS++`, dispatch a **lean fix subagent** (Agent tool, `subagent_type: general-purpose`) with the **Fix subagent prompt** below, substituting `<COMPACT_FINDINGS>` = one line per Fix-set finding (`<file>:<line> — <description>`, plus `verification.evidence` when present). After it returns, **re-run step 6's gate** (dirty + tests green; on failure follow step 6's retry/fail-fast), then loop back to (a).
-   f. If `REVIEW_ROUNDS >= REVIEW_MAX` and the Fix-set is still non-empty → log `⚠️ review did not converge for issue <EXPECTED_NN>; <N> New-Blocking finding(s) carried as won't-fix`, append the residual Fix-set to `WONTFIX`, and go to step 8 (one stubborn finding must not wedge the drain — mirrors `/finalize`'s second exit condition).
+   e. Otherwise, if `REVIEW_ROUNDS < REVIEW_MAX`: `REVIEW_ROUNDS++`, dispatch a **lean fix subagent** (Agent tool, `subagent_type: general-purpose`) with the **Fix subagent prompt** below, substituting `<COMPACT_FINDINGS>` = one line per Fix-set finding (`<severity> <file>:<line> — <description>`, plus `verification.evidence` when present; the `<severity>` prefix lets the fix subagent see Blocking-vs-Required so it can prioritize if needed, but every entry is in scope). After it returns, **re-run step 6's gate** (dirty + tests green; on failure follow step 6's retry/fail-fast), then loop back to (a).
+   f. If `REVIEW_ROUNDS >= REVIEW_MAX` and the Fix-set is still non-empty → log `⚠️ review did not converge for issue <EXPECTED_NN>; <N> unresolved Fix-set finding(s) carried as won't-fix`, append the residual Fix-set to `WONTFIX`, and go to step 8 (one stubborn finding must not wedge the drain — mirrors `/finalize`'s second exit condition).
 8. **Rename + commit (deterministic — the main loop owns this; it is the SOLE completion signal).**
    - `NN` = `EXPECTED_NN`. `git mv <EXPECTED_PATH> .matt/issues/done-<EXPECTED_NN>-<slug>.md`.
    - `TITLE` = title parsed from the new `done-` file (Title parsing); fall back to `EXPECTED_TITLE` if parsing fails.
@@ -149,7 +174,7 @@ Hard rules:
 
 ### Fix subagent prompt
 
-Substitute `<COMPACT_FINDINGS>` with one line per Fix-set finding (`<file>:<line> — <description>`, plus `verification.evidence` when present).
+Substitute `<COMPACT_FINDINGS>` with one line per Fix-set finding (`<severity> <file>:<line> — <description>`, plus `verification.evidence` when present). Fix-set includes both `Blocking` and `Accept`-verified `Required` findings — the severity prefix lets the subagent judge priority within the fix batch, but every entry must be resolved.
 
 ```
 You are one worker in an autonomous "run all issues" loop, resolving code-review findings on an
@@ -158,8 +183,9 @@ already-implemented issue in the current working directory (changes are uncommit
 Findings to resolve (independent reviewer):
 <COMPACT_FINDINGS>
 
-Your ONLY job: edit the work-tree code to resolve every New Blocking finding above while keeping
-all tests green (run the project test command). Use /tdd if a finding needs a new test.
+Your ONLY job: edit the work-tree code to resolve EVERY finding above (both Blocking and
+verifier-Accepted Required — severity is a priority hint, not a filter) while keeping all tests
+green (run the project test command). Use /tdd if a finding needs a new test.
 
 Hard rules:
 - NEVER ask a question. Do NOT rename the issue file, git commit, or push. Do NOT invoke
