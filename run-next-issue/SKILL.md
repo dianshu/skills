@@ -58,7 +58,8 @@ Print:
 Then immediately invoke `/tdd` with the selected issue file path as input. Tell the TDD flow:
 
 > Implement the issue at `<path>`. The issue file is the full contract — acceptance criteria are inside.
-> When you judge the issue fully complete, invoke `/finalize` to run review and verification.
+> When you judge the issue fully complete, invoke `/finalize` with the issue file path (`/finalize <path>`) so the
+> external reviewers verify the implementation against this issue's acceptance criteria.
 > Do NOT push. Do NOT rename or move the issue file — this skill (`/run-next-issue`) handles that in its own step 5 after `/finalize` returns.
 
 ### 5. Mark done
