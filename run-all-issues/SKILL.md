@@ -116,9 +116,10 @@ Each iteration:
 7. **Independent external review (Workflow, work tree) + fix loop.** A second opinion distinct from the subagent's own `/code-review`, run on the **uncommitted** work tree (the review scripts diff only uncommitted changes — this is why review runs per-issue, before the step-8 commit).
    a. Dispatch the review via the `Workflow` tool for **both** backends in one message (two calls), matching `/finalize` step 2's rigor. Pass the issue title as `intent` (the workflow requires it for code mode — the title is the natural 1-sentence goal for the review) and `issuePath: EXPECTED_PATH` so the `AcceptanceConformance` lens verifies the implementation against this issue's `## Acceptance criteria`:
       ```
-      Workflow({scriptPath: '~/.claude/skills/review-with-agent/review.workflow.js', args: {mode: 'code', backend: 'codex', intent: EXPECTED_TITLE, issuePath: EXPECTED_PATH}})
-      Workflow({scriptPath: '~/.claude/skills/review-with-agent/review.workflow.js', args: {mode: 'code', backend: 'opencode', intent: EXPECTED_TITLE, issuePath: EXPECTED_PATH}})
+      Workflow({scriptPath: '/home/fei/.claude/skills/review-with-agent/codex-review.workflow.js', args: {mode: 'code', intent: EXPECTED_TITLE, issuePath: EXPECTED_PATH}})
+      Workflow({scriptPath: '/home/fei/.claude/skills/review-with-agent/opencode-review.workflow.js', args: {mode: 'code', intent: EXPECTED_TITLE, issuePath: EXPECTED_PATH}})
       ```
+      (The `codex-review.workflow.js` / `opencode-review.workflow.js` wrappers force the backend and give each run a distinct name — do NOT pass `backend`. Absolute scriptPath: Workflow does NOT expand `~`.)
       (Single-backend — codex only — is a documented speed knob when a run must go faster.) Every re-run of this step in the fix loop (step 7e) MUST also pass `intent: EXPECTED_TITLE` and `issuePath: EXPECTED_PATH`.
    b. For each result: if it is `{aborted: true, ...}` or the Workflow tool itself errored (backend CLI down), log `⚠️ review skipped (<backend>): <reason>` and treat it as contributing zero findings. If **both** are skipped → log `⚠️ review skipped (both backends) for issue <EXPECTED_NN>` and go to step 8 (never wedge the drain on a missing reviewer).
    c. **Deterministic Fix/Won't-Fix triage** (rule-based on finding fields — no LLM). Over the union of both results' `findings`:
