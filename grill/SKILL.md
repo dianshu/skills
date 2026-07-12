@@ -13,7 +13,14 @@ When a question offers the user multiple directions to choose from, follow `~/.c
 
 If a *fact* can be found by exploring the codebase, look it up rather than asking me. The *decisions*, though, are mine — put each one to me and wait for my answer.
 
-Do not enact the plan until I confirm we have reached a shared understanding.
+## Confirmation gate (hard stop)
+
+Do not enact the plan, and do not hand off to any downstream step (spec, tickets, implementation), until I have explicitly confirmed we have reached a shared understanding. This is a hard stop, not a judgement you make yourself:
+
+1. When you believe the plan is settled, **stop** and present a numbered list of every *decision* the plan now rests on — one line each, as `D<n>: <decision> — <why this over the alternative>`.
+2. Ask me to confirm the list. I confirm the decisions, not you. "The codebase supports it" or "this seems aligned" is not confirmation — only my explicit yes is.
+3. If a decision on the list is one you inferred rather than one I answered, mark it `(inferred — needs your confirm)` and treat it as unresolved until I rule on it.
+4. Only after I confirm may you enact or hand off. If I later change any decision, update the list and re-confirm.
 
 </what-to-do>
 
