@@ -1,25 +1,13 @@
 # Skills
 
-Forked from [mattpocock/skills](https://github.com/mattpocock/skills).
+Forked from [mattpocock/skills](https://github.com/mattpocock/skills). **Fork point:** `16a2a5c` (upstream main, 2026-07-06).
 
-## Upstream Sync
+## Skill mapping notes
 
-- **Upstream:** https://github.com/mattpocock/skills
-- **Fork point:** `16a2a5c` (upstream main as of 2026-07-06)
+Local skills that don't map 1:1 to their upstream namesake — sync accordingly.
 
-### Skill mapping notes
-
-Some local skills don't map 1:1 to their upstream namesake — sync accordingly.
-
-- **`grill/`** — inlines upstream `productivity/grilling/` body inside `<what-to-do>`; entry maps to `engineering/grill-with-docs/`. Manually refresh when upstream `grilling` body changes.
-- **`tdd/`** — reference-only architecture (upstream `e81f976` + `80e9dcc`); no Refactor stage (delegated to `/finalize`); `deep-modules.md` merged into `improve-codebase-architecture/DEEPENING.md`; `interface-design.md` + `refactoring.md` deleted. **TODO**: `interface-design.md`'s 3 testability rules (DI / return-vs-mutate / small-surface) — fold into `improve-codebase-architecture/`?
-- **`spec/` + `tickets/` (renamed from `prd/` + `issues/`)** — aligned to upstream's
-  `to-spec` / `to-tickets` naming but **without the `to-` prefix**. Full rename map in
-  `RENAME-MAP.md`; the rename also covered `prd-review-loop→spec-review-loop`,
-  `issues-review-loop→tickets-review-loop`, `run-all-issues→run-all-tickets`,
-  `run-next-issue→run-next-ticket`, runtime paths (`.matt/issues/→.matt/tickets/`,
-  `.matt/PRD.md→.matt/SPEC.md`, `issue-tracker.md→ticket-tracker.md`), and the
-  review-with-agent mode/arg contract (`prd`/`issues` modes → `spec`/`tickets`,
-  `--issue→--ticket`, `issuePath→ticketPath`, `issueFile→ticketFile`). Preserved
-  problem-sense `issue` in code-review lenses (e.g. "security issue", "in-diff issues").
-- **`tickets/`** — file-first (`.matt/tickets/NN-slug.md` + parser), not tracker-first. **Default-reject** upstream tracker-native mechanics changes (sub-issues / blocking edges / issue-URLs); re-evaluate if upstream abstracts tracker behind a `ticket-tracker.md` doc.
+- **`grill/`** — inlines upstream `productivity/grilling/` body inside `<what-to-do>`; entry maps to `engineering/grill-with-docs/`. Refresh when upstream `grilling` body changes.
+- **`tdd/`** — reference-only; converged with upstream `engineering/tdd/` (only diff: our Refactoring line points at `/finalize`). `tests.md` + `mocking.md` siblings. **TODO:** upstream's *old* `interface-design.md` 3 testability rules (DI / return-vs-mutate / small-surface) still not folded in anywhere — `INTERFACE-DESIGN.md` is a different doc (Design-It-Twice), not those rules.
+- **`improve-codebase-architecture/`** — we inline the glossary + keep `LANGUAGE.md` / `DEEPENING.md` / `INTERFACE-DESIGN.md` siblings; upstream instead extracts these into `/codebase-design` + `/domain-modeling` skills. Same content, org differs — **not a gap**. Local-only: report language forced to Chinese.
+- **`spec/` + `tickets/`** (renamed from `prd/` + `issues/`, dropping upstream's `to-` prefix) — rename spans derivatives (`*-review-loop`, `run-all/next-*`), runtime paths (`.matt/{issues→tickets}/`, `PRD→SPEC.md`, `issue→ticket-tracker.md`), and the review-with-agent mode/arg contract (`prd`/`issues`→`spec`/`tickets`, `--issue→--ticket`, `issuePath→ticketPath`, `issueFile→ticketFile`). Problem-sense `issue` preserved in code-review lenses.
+- **`tickets/`** — file-first (`.matt/tickets/NN-slug.md` + parser), not tracker-first. **Default-reject** upstream tracker-native mechanics (sub-issues / blocking edges / issue-URLs); re-evaluate if upstream abstracts tracker behind a `ticket-tracker.md` doc.
