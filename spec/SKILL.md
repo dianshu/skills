@@ -1,25 +1,25 @@
 ---
-name: prd
-description: Turn the current conversation context into a PRD and publish it to the project issue tracker. Use when user wants to create a PRD from the current context.
+name: spec
+description: Turn the current conversation context into a spec and publish it to the project ticket tracker. Use when user wants to create a spec from the current context.
 ---
 
-This skill takes the current conversation context and codebase understanding and produces a PRD. Do NOT interview the user — just synthesize what you already know.
+This skill takes the current conversation context and codebase understanding and produces a spec. Do NOT interview the user — just synthesize what you already know.
 
-Read `~/.claude/matt/issue-tracker.md` and `~/.claude/matt/triage-labels.md` for the issue tracker and triage label configuration.
+Read `~/.claude/matt/ticket-tracker.md` and `~/.claude/matt/triage-labels.md` for the ticket tracker and triage label configuration.
 
 ## Process
 
-1. Explore the repo to understand the current state of the codebase, if you haven't already. Use the project's domain glossary vocabulary throughout the PRD, and respect any ADRs in the area you're touching.
+1. Explore the repo to understand the current state of the codebase, if you haven't already. Use the project's domain glossary vocabulary throughout the spec, and respect any ADRs in the area you're touching.
 
-   If `$PWD/GRILLCOMMITMENTS.md` exists, read it. Treat each active commitment (under `## Commitments`, not superseded in `## Modifications`) as a constraint the PRD must honor — scope, priority, definitions, and quantities stated there override any conflicting assumption you would otherwise make. If a commitment conflicts with what you are about to write, surface the conflict to the user instead of silently overriding it.
+   If `$PWD/GRILLCOMMITMENTS.md` exists, read it. Treat each active commitment (under `## Commitments`, not superseded in `## Modifications`) as a constraint the spec must honor — scope, priority, definitions, and quantities stated there override any conflicting assumption you would otherwise make. If a commitment conflicts with what you are about to write, surface the conflict to the user instead of silently overriding it.
 
 2. Sketch out the seams at which you're going to test the feature. Existing seams should be preferred to new ones. Use the highest seam possible. If new seams are needed, propose them at the highest point you can. The fewer seams across the codebase, the better — the ideal number is one.
 
 Check with the user that these seams match their expectations. Check with the user which seams they want tests written for.
 
-3. Write the PRD using the template below, then publish it to the project issue tracker. Apply the `ready-for-agent` triage label — a PRD that comes out of this skill is already fully specified and does not need additional triage.
+3. Write the spec using the template below, then publish it to the project ticket tracker. Apply the `ready-for-agent` triage label — a spec that comes out of this skill is already fully specified and does not need additional triage.
 
-<prd-template>
+<spec-template>
 
 ## Problem Statement
 
@@ -65,10 +65,10 @@ A list of testing decisions that were made. Include:
 
 ## Out of Scope
 
-A description of the things that are out of scope for this PRD.
+A description of the things that are out of scope for this spec.
 
 ## Further Notes
 
 Any further notes about the feature.
 
-</prd-template>
+</spec-template>

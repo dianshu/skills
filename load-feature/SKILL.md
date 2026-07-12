@@ -1,6 +1,6 @@
 ---
 name: load-feature
-description: Copy a feature (PRD + issues) from the global ~/.claude/matt/features/<slug>/ into the current directory's .matt/ workspace and generate .matt/CLAUDE.md with sync rules. Use when user says "load feature", "/load-feature <slug>", "checkout feature", or wants to start working on a feature locally.
+description: Copy a feature (spec + tickets) from the global ~/.claude/matt/features/<slug>/ into the current directory's .matt/ workspace and generate .matt/CLAUDE.md with sync rules. Use when user says "load feature", "/load-feature <slug>", "checkout feature", or wants to start working on a feature locally.
 ---
 
 # Load Feature
@@ -28,9 +28,9 @@ Bring a feature from the global backup into the current directory's `.matt/` wor
 ### 2. Copy files
 
 - Remove existing `.matt/` if present.
-- Create `.matt/issues/`.
-- If `~/.claude/matt/features/<slug>/PRD.md` exists, copy to `.matt/PRD.md`.
-- Copy every `~/.claude/matt/features/<slug>/issues/*.md` to `.matt/issues/`, preserving filenames (including any `done-` prefix).
+- Create `.matt/tickets/`.
+- If `~/.claude/matt/features/<slug>/SPEC.md` exists, copy to `.matt/SPEC.md`.
+- Copy every `~/.claude/matt/features/<slug>/tickets/*.md` to `.matt/tickets/`, preserving filenames (including any `done-` prefix).
 
 ### 3. Generate `.matt/CLAUDE.md`
 
@@ -44,7 +44,7 @@ Backup path: `~/.claude/matt/features/<slug>/`
 
 ## Status convention
 
-Issue completion status is encoded in the filename:
+Ticket completion status is encoded in the filename:
 - Pending: `NN-<slug>.md`
 - Done:    `done-NN-<slug>.md`
 
@@ -53,8 +53,8 @@ The filename is the single source of truth. There is no `Status:` field to maint
 ## Sync rules (local → backup, one-way)
 
 When any of these files change, immediately mirror the change to the backup:
-- `.matt/PRD.md`
-- `.matt/issues/*.md`
+- `.matt/SPEC.md`
+- `.matt/tickets/*.md`
 
 Mirror semantics:
 - Edit   → `cp` the file to the backup.
@@ -78,11 +78,11 @@ Never sync in reverse (backup → local).
 
 Print:
 - Feature loaded: `<slug>`
-- Files copied: PRD (yes/no), N issues total (M done, P pending)
+- Files copied: spec (yes/no), N tickets total (M done, P pending)
 - `.gitignore`: updated / already present / skipped (not a git repo)
-- Suggest next step: `/run-next-issue`
+- Suggest next step: `/run-next-ticket`
 
 ## Notes
 
-- This skill is the only thing that writes `.matt/CLAUDE.md`. `/run-next-issue` and `/tdd` assume it's already there.
+- This skill is the only thing that writes `.matt/CLAUDE.md`. `/run-next-ticket` and `/tdd` assume it's already there.
 - This skill never modifies the global backup.

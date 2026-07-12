@@ -22,7 +22,7 @@ for d in "$REPO_DIR"/*/; do
 done
 
 # Copy config files
-for f in issue-tracker.md triage-labels.md; do
+for f in ticket-tracker.md triage-labels.md; do
   cp "$REPO_DIR/$f" "$MATT_DIR/$f"
   echo "config: $MATT_DIR/$f"
 done
