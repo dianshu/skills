@@ -2,6 +2,10 @@
 
 Forked from [mattpocock/skills](https://github.com/mattpocock/skills). **Fork point:** `16a2a5c` (upstream main, 2026-07-06).
 
+## Sync to pi
+
+This repo's skills are the **Claude Code** copies — keep them Claude-usable, nothing more. Each also has a **pi** counterpart under `~/repos/config/agents/pi/skills/<name>/`. After you finish updating a skill here, **remember to mirror the change to its pi counterpart**, adapting it to pi's mechanics first (pi-native paths `~/.pi/agent/` + project-local `.pi/`, `AGENTS.md` instead of `CLAUDE.md`, the `workflow` tool instead of `Workflow({scriptPath})`, pi's no-approval/deny-first permission model instead of `bypassPermissions`). Mirror the **intent**, not the literal text; deliberate divergence is fine, drifting apart by forgetting to sync is not.
+
 ## Skill mapping notes
 
 Local skills that don't map 1:1 to their upstream namesake — sync accordingly.
