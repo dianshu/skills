@@ -29,8 +29,31 @@ if (cd "$repo" && "$guard" preflight "$state") >/dev/null 2>&1; then
 fi
 rm "$repo/untracked.txt"
 
+state_parent="$tmp/state-parent"
+mkdir -p "$state_parent"
+ln -s "$repo/.git" "$state_parent/link"
+if (cd "$repo" && "$guard" preflight "$state_parent/link") >/dev/null 2>&1; then
+    echo 'expected symlinked state directory to fail' >&2
+    exit 1
+fi
+[[ ! -e "$repo/.git/root" ]]
+if (cd "$repo" && "$guard" preflight "$state_parent/.") >/dev/null 2>&1; then
+    echo 'expected dot state directory to fail' >&2
+    exit 1
+fi
+[[ ! -e "$state_parent/root" ]]
+
 (cd "$repo" && "$guard" preflight "$state") >/dev/null
 [[ "$(cat "$state/start-sha")" == "$(git -C "$repo" rev-parse --verify 'HEAD^{commit}')" ]]
+[[ -s "$state/start-head" ]]
+
+# Protected domain context and ADR files can never enter the writable scope.
+for protected in CONTEXT.md nested/CONTEXT-MAP.md docs/adr/0001-choice.md src/domain/docs/adr/0002-choice.md; do
+    if "$guard" freeze "$state" "$protected" >/dev/null 2>&1; then
+        echo "expected protected path to fail: $protected" >&2
+        exit 1
+    fi
+done
 
 # Scope accepts only frozen paths and requires a non-empty final diff.
 "$guard" freeze "$state" app.txt tests/new.test.txt
@@ -38,11 +61,6 @@ printf 'changed\n' > "$repo/app.txt"
 mkdir -p "$repo/tests"
 printf 'test\n' > "$repo/tests/new.test.txt"
 "$guard" check-scope "$state" --require-nonempty >/dev/null
-"$guard" require-changed "$state" tests/new.test.txt >/dev/null
-if "$guard" require-changed "$state" tests/missing.test.txt >/dev/null 2>&1; then
-    echo 'expected unchanged required path to fail' >&2
-    exit 1
-fi
 "$guard" snapshot-diff "$state" >/dev/null
 chmod +x "$repo/tests/new.test.txt"
 if "$guard" check-diff "$state" >/dev/null 2>&1; then

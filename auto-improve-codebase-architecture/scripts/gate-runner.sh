@@ -7,7 +7,7 @@ fail() {
 }
 
 require_state() {
-    [[ -f "$1/root" && -f "$1/start-sha" ]] || fail 65 'invalid guard state'
+    [[ -f "$1/root" && -f "$1/start-sha" && -f "$1/start-head" ]] || fail 65 'invalid guard state'
 }
 
 detect_runner() {
@@ -87,6 +87,15 @@ behavior_output_has_tests() {
             return 1
             ;;
     esac
+}
+
+emit_run_result() {
+    local state="$1" status="$2" reason="$3" gates="${4:-0}" behavior="${5:-0}" tmp
+    printf '%s\n' "$status" > "$state/gate-run-status"
+    tmp="$(mktemp "$state/gate-result.XXXXXX")"
+    printf '{"status":"%s","reason":"%s","gates":%s,"behaviorGates":%s}\n' "$status" "$reason" "$gates" "$behavior" > "$tmp"
+    mv "$tmp" "$state/gate-result.json"
+    cat "$state/gate-result.json"
 }
 
 stop_process_group() {
@@ -210,20 +219,20 @@ case "$command" in
         [[ "$mode" == baseline || "$mode" == final ]] || fail 64 "invalid gate mode: $mode"
         command -v setsid >/dev/null 2>&1 || fail 38 'setsid is required for controlled gate processes'
         root="$(cat "$state/root")"
-        rm -f "$state/gate-run-status"
+        rm -f "$state/gate-run-status" "$state/gate-result.json"
         if ! check_frozen_inputs "$state"; then
             if [[ "$mode" == baseline ]] && ! "$guard" check-clean "$state" >/dev/null; then
                 if "$guard" rollback "$state" >/dev/null; then
-                    printf 'FAILED_ROLLED_BACK\n' > "$state/gate-run-status"
+                    status='FAILED_ROLLED_BACK'
                 else
-                    printf 'ROLLBACK_FAILED\n' > "$state/gate-run-status"
+                    status='ROLLBACK_FAILED'
                 fi
             elif [[ "$mode" == baseline ]]; then
-                printf 'NOOP\n' > "$state/gate-run-status"
+                status='NOOP'
             else
-                printf 'FAILED\n' > "$state/gate-run-status"
+                status='FAILED'
             fi
-            printf '{"status":"%s","reason":"frozen gate inputs changed"}\n' "$(cat "$state/gate-run-status")"
+            emit_run_result "$state" "$status" 'frozen gate inputs changed'
             exit 0
         fi
         : > "$state/gate-results.tsv"
@@ -269,43 +278,33 @@ case "$command" in
             if [[ "$mode" == baseline ]]; then
                 if ! "$guard" check-clean "$state" >/dev/null; then
                     if "$guard" rollback "$state" >/dev/null; then
-                        printf 'FAILED_ROLLED_BACK\n' > "$state/gate-run-status"
+                        status='FAILED_ROLLED_BACK'
                     else
-                        printf 'ROLLBACK_FAILED\n' > "$state/gate-run-status"
+                        status='ROLLBACK_FAILED'
                     fi
-                    printf '{"status":"%s","reason":"baseline changed worktree"}\n' "$(cat "$state/gate-run-status")"
+                    emit_run_result "$state" "$status" 'baseline changed worktree' "$index" "$behavior_count"
                     exit 0
                 fi
             else
                 if ! "$guard" check-scope "$state" >/dev/null || ! "$guard" check-diff "$state" >/dev/null; then
-                    printf 'FAILED\n' > "$state/gate-run-status"
-                    printf '{"status":"FAILED","reason":"final gate changed diff or scope"}\n'
+                    emit_run_result "$state" 'FAILED' 'final gate changed diff or scope' "$index" "$behavior_count"
                     exit 0
                 fi
             fi
 
             if [[ "$exit_code" -ne 0 || "$proof" == missing || "$background_processes" == true || "$inputs_ok" == false ]]; then
-                if [[ "$mode" == baseline ]]; then
-                    printf 'NOOP\n' > "$state/gate-run-status"
-                else
-                    printf 'FAILED\n' > "$state/gate-run-status"
-                fi
-                printf '{"status":"%s","reason":"gate failed, escaped a process, or executed no supported tests"}\n' "$(cat "$state/gate-run-status")"
+                if [[ "$mode" == baseline ]]; then status='NOOP'; else status='FAILED'; fi
+                emit_run_result "$state" "$status" 'gate failed, escaped a process, or executed no supported tests' "$index" "$behavior_count"
                 exit 0
             fi
         done < "$state/gates.tsv"
 
         if [[ "$behavior_count" -lt 1 ]]; then
-            if [[ "$mode" == baseline ]]; then
-                printf 'NOOP\n' > "$state/gate-run-status"
-            else
-                printf 'FAILED\n' > "$state/gate-run-status"
-            fi
-            printf '{"status":"%s","reason":"no behavior tests executed"}\n' "$(cat "$state/gate-run-status")"
+            if [[ "$mode" == baseline ]]; then status='NOOP'; else status='FAILED'; fi
+            emit_run_result "$state" "$status" 'no behavior tests executed' "$index" "$behavior_count"
             exit 0
         fi
-        printf 'PASS\n' > "$state/gate-run-status"
-        printf '{"status":"PASS","gates":%s,"behaviorGates":%s}\n' "$index" "$behavior_count"
+        emit_run_result "$state" 'PASS' 'all gates passed' "$index" "$behavior_count"
         ;;
 
     *)

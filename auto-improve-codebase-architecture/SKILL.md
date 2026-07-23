@@ -24,6 +24,7 @@ Read the sibling architecture references before starting:
 - One run, one domain context, one seam, one candidate.
 - No questions. Ambiguity means `NO-OP`.
 - No commit, push, PR, dependency upgrade, or unrelated cleanup.
+- Never run two instances concurrently in the same repository; the single-maintainer design intentionally uses no repository lock.
 - Repository gate scripts are trusted personal code. This skill does not sandbox a deliberately deceptive test command or a child process that intentionally escapes its process group.
 - Only the workflow's serialized writer role may edit source, tests, or necessary technical docs. The initial implementation and optional one-time fix never run concurrently.
 - The final status is exactly one of:
@@ -75,4 +76,4 @@ First print the workflow's terminal status and concise reason. Then create the r
 - final verification or rollback evidence;
 - the exact terminal status.
 
-Use the visual language from [HTML-REPORT.md](../improve-codebase-architecture/HTML-REPORT.md), but keep the report compact. HTML-escape every repository-derived value before interpolation and configure Mermaid with `securityLevel: 'strict'`. If report creation or opening fails, print `report unavailable`; never change the workflow status because of report I/O.
+Borrow only the visual vocabulary from [HTML-REPORT.md](../improve-codebase-architecture/HTML-REPORT.md), but keep the report compact and self-contained. Do not load Tailwind, Mermaid, any CDN asset, or any script. Use inline CSS and static SVG only, add a restrictive CSP (`default-src 'none'; style-src 'unsafe-inline'; img-src data:`), and HTML-escape every repository-derived value before interpolation. If report creation or opening fails, print `report unavailable`; never change the workflow status because of report I/O.

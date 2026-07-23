@@ -27,6 +27,11 @@ verify_repository_identity() {
 
 validate_manifest_path() {
     local root="$1" path="$2" code="$3" candidate component components
+    case "$path" in
+        CONTEXT.md|*/CONTEXT.md|CONTEXT-MAP.md|*/CONTEXT-MAP.md|docs/adr/*|*/docs/adr/*)
+            fail "$code" "protected architecture context path: $path"
+            ;;
+    esac
     candidate="$root"
     IFS='/' read -r -a components <<< "$path"
     for component in "${components[@]}"; do
@@ -63,7 +68,7 @@ write_diff_fingerprint() {
 }
 
 command="${1:-}"
-[[ -n "$command" ]] || fail 64 'usage: git-guard.sh <preflight|freeze|arm|check-clean|check-scope|require-changed|snapshot-diff|check-diff|rollback> ...'
+[[ -n "$command" ]] || fail 64 'usage: git-guard.sh <preflight|freeze|arm|check-clean|check-scope|snapshot-diff|check-diff|rollback> ...'
 shift
 
 case "$command" in
@@ -75,11 +80,22 @@ case "$command" in
         if git -C "$root" ls-files --stage | grep '^160000 ' >/dev/null; then
             fail 14 'repositories with submodules are not supported'
         fi
-        mkdir -p "$1"
-        state="$(cd "$1" && pwd -P)"
+        [[ "$1" == /* ]] || fail 12 'state directory must be an absolute path'
+        parent="$(dirname "$1")"
+        name="$(basename "$1")"
+        [[ "$name" != . && "$name" != .. ]] || fail 12 'state directory name must not be dot or dot-dot'
+        [[ -d "$parent" ]] || fail 12 'state directory parent does not exist'
+        state="$(cd "$parent" && pwd -P)/$name"
         root="$(cd "$root" && pwd -P)"
         case "$state/" in
             "$root/"*) fail 12 'state directory must be outside the repository' ;;
+        esac
+        [[ ! -L "$1" ]] || fail 12 'state directory must not be a symlink'
+        [[ ! -e "$1" || -d "$1" ]] || fail 12 'state path is not a directory'
+        mkdir -p "$state"
+        state="$(cd "$state" && pwd -P)"
+        case "$state/" in
+            "$root/"*) fail 12 'state directory resolves inside the repository' ;;
         esac
         printf '%s\n' "$root" > "$state/root"
         printf '%s\n' "$sha" > "$state/start-sha"
@@ -156,33 +172,6 @@ case "$command" in
         rm -f "$changed"
         trap - EXIT
         printf '{"status":"IN_SCOPE","paths":%s}\n' "$count"
-        ;;
-
-    require-changed)
-        [[ $# -ge 2 ]] || fail 64 'usage: git-guard.sh require-changed <state-dir> <path>...'
-        state="$1"
-        shift
-        require_state "$state"
-        [[ -f "$state/manifest" ]] || fail 65 'scope is not frozen'
-        root="$(cat "$state/root")"
-        sha="$(cat "$state/start-sha")"
-        verify_repository_identity "$state"
-        changed="$state/required-changed.$$"
-        trap 'rm -f "$changed"' EXIT
-        git -C "$root" diff --no-renames --name-only -z "$sha" -- > "$changed"
-        git -C "$root" diff --cached --no-renames --name-only -z "$sha" -- >> "$changed"
-        git -C "$root" ls-files --others --exclude-standard -z >> "$changed"
-        for required in "$@"; do
-            grep -Fqx -- "$required" "$state/manifest" || fail 29 "required path is outside scope: $required"
-            found=false
-            while IFS= read -r -d '' path; do
-                if [[ "$path" == "$required" ]]; then found=true; break; fi
-            done < "$changed"
-            [[ "$found" == true ]] || fail 29 "required path did not change: $required"
-        done
-        rm -f "$changed"
-        trap - EXIT
-        printf '{"status":"REQUIRED_PATHS_CHANGED","paths":%s}\n' "$#"
         ;;
 
     snapshot-diff)

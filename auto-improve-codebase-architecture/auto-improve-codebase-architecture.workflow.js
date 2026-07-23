@@ -15,7 +15,7 @@ const shellQuote = value => "'" + String(value).replace(/'/g, "'\\''") + "'"
 
 const OP_SCHEMA = {
   type: 'object',
-  required: ['ok', 'detail'],
+  required: ['ok', 'detail', 'output'],
   properties: {
     ok: { type: 'boolean' },
     detail: { type: 'string' },
@@ -112,17 +112,6 @@ const PLAN_SCHEMA = {
   },
 }
 
-const BASELINE_SCHEMA = {
-  type: 'object',
-  required: ['status', 'results', 'behaviorTestsExecuted', 'reason'],
-  properties: {
-    status: { enum: ['pass', 'noop', 'rolled_back', 'rollback_failed'] },
-    results: { type: 'array', items: { type: 'string' } },
-    behaviorTestsExecuted: { type: 'integer' },
-    reason: { type: 'string' },
-  },
-}
-
 const WRITE_SCHEMA = {
   type: 'object',
   required: ['ok', 'changedPaths', 'testsAddedOrChanged', 'summary'],
@@ -157,29 +146,37 @@ const REVIEW_SCHEMA = {
   },
 }
 
-const VERIFY_SCHEMA = {
-  type: 'object',
-  required: ['ok', 'results', 'behaviorTestsExecuted', 'reason'],
-  properties: {
-    ok: { type: 'boolean' },
-    results: { type: 'array', items: { type: 'string' } },
-    behaviorTestsExecuted: { type: 'integer' },
-    reason: { type: 'string' },
-  },
-}
-
 const result = (status, reason, evidence = {}) => ({ status, reason, evidence })
 
+const parseLastJsonLine = output => {
+  const lines = String(output || '').trim().split('\n').filter(Boolean)
+  return lines.length > 0 ? JSON.parse(lines[lines.length - 1]) : null
+}
+
+const validRunPayload = payload => {
+  if (!payload || !['PASS', 'NOOP', 'FAILED', 'FAILED_ROLLED_BACK', 'ROLLBACK_FAILED'].includes(payload.status)) return false
+  if (typeof payload.reason !== 'string' || !Number.isInteger(payload.gates) || !Number.isInteger(payload.behaviorGates)) return false
+  return payload.status !== 'PASS' || (payload.gates >= 1 && payload.behaviorGates >= 1)
+}
+
 async function rollback(reason, evidence) {
-  const rollbackResult = await agent(`Work only in ${cwd}. Run exactly this deterministic rollback command and report its real exit result:\n\nbash ${shellQuote(guardPath)} rollback ${shellQuote(stateDir)}\n\nDo not edit files and do not run any other recovery command.`, {
+  try {
+  const rollbackResult = await agent(`Work only in ${cwd}. Run exactly this deterministic rollback command and report its real exit result:\n\nbash ${shellQuote(guardPath)} rollback ${shellQuote(stateDir)}\n\nDo not edit files and do not run any other recovery command. Return the command stdout verbatim in output.`, {
     label: 'guard rollback',
     tier: 'small',
     schema: OP_SCHEMA,
   })
-  if (rollbackResult && rollbackResult.ok) {
+  let rollbackPayload = null
+  try {
+    rollbackPayload = rollbackResult ? parseLastJsonLine(rollbackResult.output) : null
+  } catch {}
+  if (rollbackResult && rollbackResult.ok && rollbackPayload && rollbackPayload.status === 'FAILED_ROLLED_BACK') {
     return result('FAILED_ROLLED_BACK', reason, { ...evidence, rollback: rollbackResult })
   }
   return result('ROLLBACK_FAILED', reason, { ...evidence, rollback: rollbackResult })
+  } catch (error) {
+    return result('ROLLBACK_FAILED', reason, { ...evidence, rollbackError: String(error) })
+  }
 }
 
 async function scopeCheck(label, requireNonempty) {
@@ -199,6 +196,8 @@ async function finalIntegrityCheck() {
   })
 }
 
+let rollbackArmed = false
+try {
 const preflight = await agent(`Run exactly:\n\ncd ${shellQuote(cwd)} && bash ${shellQuote(guardPath)} preflight ${shellQuote(stateDir)}\n\nDo not edit repository files. Set ok only when the command exits 0; include its output verbatim.`, {
   label: 'guard preflight',
   tier: 'small',
@@ -255,7 +254,7 @@ if (!gates || gates.status !== 'ready' || gates.commands.length === 0) {
   return result('NO-OP', 'GATE_DISCOVERY_FAILED', { gates })
 }
 
-const plan = await agent(`Read-only scope plan in ${cwd}. Produce the smallest frozen path list for the admitted candidate, including behavior tests and only necessary technical docs. Paths must be repository-relative. Do not include CONTEXT.md, CONTEXT-MAP.md, ADRs, dependency manifests for upgrades, generated files, or unrelated cleanup. List observable behaviors to preserve and any closed-world contract migrations. Return noop if the complete path set cannot be known before editing.\nCandidate: ${JSON.stringify(consensus.candidate)}\nGate manifest: ${JSON.stringify(gates)}`, {
+const plan = await agent(`Read-only scope plan in ${cwd}. Produce the smallest frozen path list for the admitted candidate, including any behavior tests needed to preserve the listed behaviors and only necessary technical docs. Paths must be repository-relative. Do not include CONTEXT.md, CONTEXT-MAP.md, ADRs, dependency manifests for upgrades, generated files, or unrelated cleanup. List observable behaviors to preserve and any closed-world contract migrations. Return noop if the complete path set cannot be known before editing.\nCandidate: ${JSON.stringify(consensus.candidate)}\nGate manifest: ${JSON.stringify(gates)}`, {
   label: 'change planner',
   tier: 'big',
   schema: PLAN_SCHEMA,
@@ -264,33 +263,39 @@ if (!plan || plan.status !== 'ready' || plan.paths.length === 0 || plan.preserve
   return result('NO-OP', 'SCOPE_PLANNING_FAILED', { plan })
 }
 
+rollbackArmed = true
 const armed = await agent(`Work only in ${cwd}. Run exactly:\n\nbash ${shellQuote(guardPath)} arm ${shellQuote(stateDir)}\n\nDo not edit repository files. Set ok only from the command exit status.`, {
   label: 'guard arm',
   tier: 'small',
   schema: OP_SCHEMA,
 })
 if (!armed || !armed.ok) {
-  return result('NO-OP', 'ROLLBACK_ARM_FAILED', { armed })
+  return await rollback('ROLLBACK_ARM_FAILED', { armed })
 }
 
-const baseline = await agent(`Work only in ${cwd}. Run exactly this deterministic frozen-gate command:\n\nbash ${shellQuote(gateRunnerPath)} run ${shellQuote(stateDir)} baseline ${shellQuote(guardPath)}\n\nDo not edit files, install tools, or run gates yourself. Read ${stateDir}/gate-run-status and ${stateDir}/gate-results.tsv. The command exit status must be 0 and the status file must exist. Map PASS→pass, NOOP→noop, FAILED_ROLLED_BACK→rolled_back, and ROLLBACK_FAILED→rollback_failed. Return every result row and the count of rows whose behavior proof is executed.`, {
+const baselineRun = await agent(`Work only in ${cwd}. Run exactly this deterministic frozen-gate command:\n\nbash ${shellQuote(gateRunnerPath)} run ${shellQuote(stateDir)} baseline ${shellQuote(guardPath)} >/dev/null && cat ${shellQuote(stateDir + '/gate-result.json')}\n\nDo not edit files, install tools, or run gates yourself. Return the complete command output verbatim.`, {
   label: 'baseline gates',
-  tier: 'medium',
-  schema: BASELINE_SCHEMA,
+  tier: 'small',
+  schema: OP_SCHEMA,
 })
-if (!baseline) {
-  return await rollback('BASELINE_RUNNER_FAILED', { gates })
+let baselinePayload = null
+try {
+  baselinePayload = baselineRun && baselineRun.ok ? parseLastJsonLine(baselineRun.output) : null
+} catch {}
+const baseline = { run: baselineRun, payload: baselinePayload }
+if (!validRunPayload(baselinePayload)) {
+  return await rollback('BASELINE_RUNNER_FAILED', { gates, baseline })
 }
-if (baseline.status === 'noop') {
+if (baselinePayload.status === 'NOOP') {
   return result('NO-OP', 'BASELINE_FAILED', { gates, baseline })
 }
-if (baseline.status === 'rolled_back') {
+if (baselinePayload.status === 'FAILED_ROLLED_BACK') {
   return result('FAILED_ROLLED_BACK', 'BASELINE_CHANGED_WORKTREE', { gates, baseline })
 }
-if (baseline.status === 'rollback_failed') {
+if (baselinePayload.status === 'ROLLBACK_FAILED') {
   return result('ROLLBACK_FAILED', 'BASELINE_CHANGED_WORKTREE', { gates, baseline })
 }
-if (baseline.status !== 'pass' || baseline.behaviorTestsExecuted < 1) {
+if (baselinePayload.status !== 'PASS') {
   return await rollback('BASELINE_INVALID', { gates, baseline })
 }
 
@@ -351,12 +356,17 @@ if (firstReview.findings.length > 0) {
   }
 }
 
-const verification = await agent(`Work only in ${cwd}. Run exactly this deterministic frozen-gate command:\n\nbash ${shellQuote(gateRunnerPath)} run ${shellQuote(stateDir)} final ${shellQuote(guardPath)}\n\nDo not edit files, install tools, rediscover gates, or run any other command. Read ${stateDir}/gate-run-status and ${stateDir}/gate-results.tsv. Set ok only when the command exits 0 and status is PASS; return every result row and count rows whose behavior proof is executed.\nFrozen plan: ${JSON.stringify(plan)}`, {
+const verificationRun = await agent(`Work only in ${cwd}. Run exactly this deterministic frozen-gate command:\n\nbash ${shellQuote(gateRunnerPath)} run ${shellQuote(stateDir)} final ${shellQuote(guardPath)} >/dev/null && cat ${shellQuote(stateDir + '/gate-result.json')}\n\nDo not edit files, install tools, rediscover gates, or run any other command. Return the complete command output verbatim.\nFrozen plan: ${JSON.stringify(plan)}`, {
   label: 'final gate verifier',
-  tier: 'medium',
-  schema: VERIFY_SCHEMA,
+  tier: 'small',
+  schema: OP_SCHEMA,
 })
-if (!verification || !verification.ok || verification.behaviorTestsExecuted < 1) {
+let verificationPayload = null
+try {
+  verificationPayload = verificationRun && verificationRun.ok ? parseLastJsonLine(verificationRun.output) : null
+} catch {}
+const verification = { run: verificationRun, payload: verificationPayload }
+if (!validRunPayload(verificationPayload) || verificationPayload.status !== 'PASS') {
   return await rollback('FINAL_VERIFICATION_FAILED', { verification, firstReview, fixResult, finalReview })
 }
 
@@ -380,3 +390,9 @@ return result('VERIFIED', 'ALL_GATES_PASSED', {
   verification,
   finalScope,
 })
+} catch (error) {
+  if (rollbackArmed) {
+    return await rollback('WORKFLOW_EXCEPTION', { error: String(error) })
+  }
+  return result('NO-OP', 'WORKFLOW_EXCEPTION', { error: String(error) })
+}
